@@ -1,5 +1,13 @@
 import numpy as np
 
+class RwHoptCond:
+  # conditions for reweighted heuristic 
+  def __init__(self, maxIter, eigThres, corner):
+    self.maxIter = maxIter # number of max iterations
+    self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
+    self.corner = corner  # rank-1 on corner (1) or on full matrix (0)
+    
+
 def createNormalVectors(D, Ns):
   # Generates a matrix of Normal Vectors from a random distribution
   # Inputs: - D: dimension
