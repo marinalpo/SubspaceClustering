@@ -41,22 +41,20 @@ Nc = 1 + Ns*D  # Size of the top left corner
 
 # Define index entries
 ind_r = lambda i, d: (1+i*D+d)
-ind_s = lambda i, j: (1+Ns*D+(j-1)*Ns+i)  # REPASSAR
+ind_s = lambda i, j: (1+Ns*D+j*Ns+i)
 tic = time()
 
 # Create variables
 X = cp.Variable((Nm, Nm), PSD=True)  # X is PSD
 C = []  # Fixed constraints
-Citer = []  # Constraints that will change through iterations
 for i in range(Ns):  # For each subspace
     ind = ind_r(i,(np.arange(D)))
-    C = C + [cp.trace(X[np.ix_(ind,ind)]) == 1]
+    C = C + [cp.trace(X[np.ix_(ind,ind)]) == 1]  # (8d) Subspace normals have norm 1
     for j in range(Np):  # For each subpoint
-        C = C + [ X[1,ind_s(i,j)] == X[ind_s(i,j),ind_s(i,j)] ]  # s_ij and (s_ij)^2 are equal
-        C = C + [ X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[1,ind_s(i,j)] <= 0]  # First inequality of abs. value
-        C = C + [ - X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[1,ind_s(i,j)] <= 0] # Second inequality of abs. value
-        C = C + [cp.sum(X[np.ix_(ind_r(np.arange(Ns),j))]) == 1]  # Sum of labels for each point equals 1
-
+        C = C + [ X[0,ind_s(i,j)] == X[ind_s(i,j),ind_s(i,j)] ]  # (8b) s_ij and (s_ij)^2 are equal
+        C = C + [ X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[0,ind_s(i,j)] <= 0]  # (8a) First inequality of abs. value
+        C = C + [ - X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[0,ind_s(i,j)] <= 0] # (8a) Second inequality of abs. value
+        C = C + [cp.sum(X[0,ind_s(np.arange(Ns),j)]) == 1]  # (8c) Sum of labels for each point equals 1
 C = C + [X[0,0]==1]  # 1 on the upper left corner
 
 if RwHopt.corner:
@@ -66,7 +64,7 @@ else:
     # W = np.eye(Nc) + delta*np.random.randn(Nm,Nm)
     W = np.eye(Nm)
 
-# Solve the problem
+# Solve the problem with Reweighted Heuristics
 rank1ness = np.zeros([RwHopt.maxIter,1])
 bestX = X
 for iter in range(RwHopt.maxIter):
@@ -80,11 +78,12 @@ for iter in range(RwHopt.maxIter):
         obj = cp.Minimize(cp.trace(W.T*X))
         prob = cp.Problem(obj, C)
         sol = prob.solve(solver=cp.MOSEK, verbose=False)
-        #test = X[np.ix_(ind_r(np.arange(Ns),j))]
-        #print('test:',test.value)
+        # test = cp.sum(X[0,ind_s(np.arange(Ns),0)])
+        # print('test:',test.value)
         [Si, Ui] = np.linalg.eig(X.value)
 
     sorted_eigs = -np.sort(-Si)
+    print(np.round(sorted_eigs))
     rank1ness_curr = sorted_eigs[0]/np.sum(sorted_eigs)
     rank1ness[iter]=rank1ness_curr
     if np.max(rank1ness) == rank1ness[iter]:
@@ -94,8 +93,8 @@ for iter in range(RwHopt.maxIter):
 
 runtime = time() - tic
 s = X[ind_r(Ns,D):,0]
-S = cp.reshape(s,(Ns,Np))
-print(S.value)
+#S = cp.reshape(s,(Ns,Np))
+#print(S.value)
 R = ''
 for i in range(Ns):
     a = 0
