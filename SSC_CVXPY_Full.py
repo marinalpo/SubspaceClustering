@@ -15,7 +15,7 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
   # Outputs: - R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
   #          - S: NsxNp matrix, with labels for each point and subspace
   #          - runtime: runtime of the algorithm (excluding solution extraction)
-  #          - rankness: ???
+  #          - rankness: rankness of every iteration
   # Define dimension and number of points
 
   [D, Np] = Xp.shape
@@ -50,7 +50,6 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
 
   # Solve the problem with Reweighted Heuristics
   rank1ness = np.zeros([RwHopt.maxIter, 1])
-  bestX = X
 
   for iter in range(RwHopt.maxIter):
     if RwHopt.corner:
@@ -63,8 +62,6 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
       obj = cp.Minimize(cp.trace(W.T * X))
       prob = cp.Problem(obj, C)
       sol = prob.solve(solver=cp.MOSEK, verbose=False)
-      # test = cp.sum(X[0,ind_s(np.arange(Ns),0)])
-      # print('test:',test.value)
       [val, vec] = np.linalg.eig(np.array(X.value, dtype=np.float))
 
     idx = val.argsort()[::-1]
@@ -72,16 +69,13 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     sortedvec = vec[:, idx]
     rank1ness_curr = sortedval[0] / np.sum(sortedval)
     rank1ness[iter] = rank1ness_curr
-    W = sortedvec * np.diag(1 / (sortedvec + np.exp(-5))) * sortedvec.T
-    if np.max(rank1ness) == rank1ness[iter]:
-      bestX = X.value
+    W = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
     if np.min(rank1ness[iter]) > RwHopt.eigThres:
       break
 
   runtime = time() - tic
   s = X[0, ind_r(Ns - 1, D - 1) + 1:]
   S = cp.reshape(s, (Ns, Np))
-  print(S.value)
   R = []
   for i in range(Ns):
     R.append(X[np.ix_(ind_r(i, (np.arange(0, D))), ind_r(i, (np.arange(0, D))))])

@@ -1,8 +1,7 @@
 # Experiments2_full.m -----------------------------------------------------------------
 # Exp 1: Fix Ns and D, run for different Np and record the running time and convergence
 import numpy as np
-import cvxpy as cp
-from time import time
+from tempfile import TemporaryFile
 from utils import *
 from SSC_CVXPY_Full import *
 
@@ -17,9 +16,9 @@ delta = 0.1
 eps = 0.1  # Noise bound
 
 # Data dumps
-iterations = np.zeros([len(Npoints), N_tests])
-runtime = np.zeros([len(Npoints), N_tests])
-rank1ness = np.zeros([len(Npoints), N_tests]) # MUST BE A CELL
+Iterations = np.zeros([len(Npoints), N_tests])
+Runtime = np.zeros([len(Npoints), N_tests])
+Rank1ness = []
 
 for k in range(len(Npoints)):
     for t in range(N_tests):
@@ -32,8 +31,11 @@ for k in range(len(Npoints)):
         # Rank 1 on moment matrix
         RwHopt.corner = 0
         R, S, runtime, rank1ness = SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta)
-        print(S)
+        # test = cp.sum(S, axis = 0)
+        # print('test:', test.value)
+        Iterations[k,t] = len(rank1ness)
+        Runtime[k,t] = runtime
+        Rank1ness.append(rank1ness)
 
-# Rank 1 on corner
-RwHopt.corner = 1
+np.savez('experiments_2_dump_full.npz', name1 = Iterations, name2 = Runtime, name3 = Rank1ness, name4 = Ns, name5 = D, name6 = Npoints)
 
