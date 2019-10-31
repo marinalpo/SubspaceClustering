@@ -38,8 +38,8 @@ Nm = 1 + Ns*(Np + D)  # Size of the overall matrix
 
 
 # Define index entries
-ind_r = lambda i, d: (1+(i-1)*D+d)
-ind_s = lambda i, j: (1+Ns*D+(j-1)*Ns+i)
+ind_r = lambda i, d: (1+i*D+d)
+ind_s = lambda i, j: (1+Ns*D+j*Ns+i)
 tic = time.time()
 
 M = []
@@ -48,11 +48,11 @@ for j in range(0,Np):
 	M.append(cp.Variable((1+Ns*D+Ns,1+Ns*D+Ns), PSD=True)) # M[j] should be psd
 
 R = cp.Variable((1+Ns*D, 1+Ns*D)) # We don't know if R should be psd
-
+print(R.shape)
 C = [] # Constraints that are fixed through iterations
 
 for j in range(0, Np):
-	C.append(M[j][0:1+Ns*D, 0:1+Ns*D]==R) # Upper left submatrix of M_j should be
+	C.append(M[j][np.ix_(np.arange(0,1+Ns*D),np.arange(0,1+Ns*D))]==R) # Upper left submatrix of M_j should be
 	C.append(cp.sum(M[j][np.arange(0,Ns), 0]) == 1)
 	for i in range(0, Ns):
 		C.append( M[j][0,ind_s(i,0)] == M[j][ind_s(i,0), ind_s(i,0)] )
@@ -65,7 +65,7 @@ print("ind_r(0,np.arange(0,D)) = " + str(ind_r(0,np.arange(0,D))))
 print("ind_r(i, np.arange(0,D)) = " + str(ind_r(i, np.arange(0,D)))) 
 for i in range(0, Ns):
 	print("R[np.ix_(ind_r(0,np.arange(0,D))), np.ix_(ind_r(i, np.arange(0,D))) ] = " + str(R[np.ix_(ind_r(0,np.arange(0,D))), np.ix_(ind_r(i, np.arange(0,D))) ]))
-	C.append(cp.trace( R[np.ix_(ind_r(0,np.arange(0,D))), np.ix_(ind_r(i, np.arange(0,D))) ]) == 1 )
+	C.append(cp.trace( R[np.ix_(ind_r(i,np.arange(0,D)), ind_r(i, np.arange(0,D))) ]) == 1 )
 
 
 W = np.eye(1+Ns*D) + delta*np.random.randn(1+Ns*D, 1+Ns*D)
@@ -73,7 +73,7 @@ rank1ness = np.zeros(RwHopt.maxIter)
 bestR = R
 bestM = M
 
-objective = cp.trace(np.matmul(W.T, R))
+objective = cp.Minimize(cp.trace(W.T*R))
 prob = cp.Problem(objective, C)
 
 
@@ -89,45 +89,3 @@ for itera in range(0, RwHopt.maxIter):
 
 
 
-
-# Create variables
-X = cp.Variable((Nm, Nm), PSD=True)  # X is PSD
-C = []  # Fixed constraints
-Citer = []  # Constraints that will change through iterations
-for i in range(Ns):  # For each subspace
-	ind = ind_r(i+1,(np.arange(D)+1))
-	C = C + [cp.trace(X[np.ix_(ind,ind)]) == 1]
-	for j in range(Np):  # For each subpoint
-		C = C + [ X[1,ind_s(i,j)] == X[ind_s(i,j),ind_s(i,j)] ]  # s_ij and (s_ij)^2 are equal
-		C = C + [ X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[1,ind_s(i,j)] <= 0]  # First inequality of abs. value
-		C = C + [ - X[ind,ind_s(i,j)].T*Xp[:,j] - eps*X[1,ind_s(i,j)] <= 0] # Second inequality of abs. value
-		C = C + [cp.sum(X[np.ix_(ind_r(np.arange(Ns),j))]) == 1]  # Sum of labels for each point equals 1
-C = C + [X[0,0]==1]  # 1 on the upper left corner
-
-##### TRADUIR options = sdpsettings('solver','mosek', 'verbose', 0, 'cachesolvers', 1);
-
-if RwHopt.corner:	
-	# W = np.eye(Nc) + delta*np.random.randn(Nc,Nc)
-	W = np.eye(Nc)
-else:
-	# W = np.eye(Nc) + delta*np.random.randn(Nm,Nm)
-	W = np.eye(Nm)
-
-# Solve the problem
-rank1ness = np.zeros([RwHopt.maxIter,1])
-bestX = X
-for iter in range(RwHopt.maxIter):
-	if RwHopt.corner:
-		M = X[1:Nc, 1:Nc]
-		tr = cp.trace(W.T*M)
-	else:
-		tr = cp.trace(W.T*X)
-
-### MISSING
-
-runtime = time() - tic
-
-# FUNCTION ends -------------------------------------
-
-# Rank 1 on corner
-RwHopt.corner = 1
