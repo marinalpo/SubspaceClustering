@@ -13,7 +13,7 @@ Npoints = Ns*(np.arange(20)+1)  # Number of points per dimension
 N_tests = 8
 RwHopt = RwHoptCond(20, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
-eps = 0.1  # Noise bound
+eps = 0.2  # Noise bound
 
 # Data dumps
 Iterations = np.zeros([len(Npoints), N_tests])
