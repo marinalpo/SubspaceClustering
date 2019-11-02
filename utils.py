@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class RwHoptCond:
   # conditions for reweighted heuristic 
@@ -7,6 +8,22 @@ class RwHoptCond:
     self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
     self.corner = corner  # rank-1 on corner (1) or on full matrix (0)
     
+
+def plotNormalsAndPoints(normals,Xp,ss_ind,t):
+  # ONLY FOR 2 DIMENSIONS AND UP TO 7 SUBSPACES
+  c = ['r','b','g','m','c','k','y']
+  [a, Ns] = normals.shape
+  for i in range(Ns):
+      idx = np.where(ss_ind==i)
+      Xs = Xp[:,idx[0]]
+      x = np.arange(-10,10)
+      y = -(normals[0,i]/normals[1,i])*(x)
+      plt.plot(x,y,color=c[i])
+      plt.scatter(Xs[0,:], Xs[1,:], c=c[i], edgecolors='k')
+  plt.axis((-5,5,-5,5))
+  plt.title(t)
+  plt.show()
+
 
 def createNormalVectors(D, Ns):
   # Generates a matrix of Normal Vectors from a random distribution
@@ -28,19 +45,17 @@ def generatePoints(normals, num_points, noise_b, sq_side):
   #         - sq_side: size of the square from which we sample.
   # Outputs: - X: DxN matrix with the N points
   #          - ss_ind: index of the subspace.
-    N = np.sum(num_points)
-    [D, S] = normals.shape
-    X = np.zeros([D, N])
-    ss_ind = np.zeros([N, 1])
-    k = 0
-    for ss in range(S):
-      X_tmp = np.vstack((2 * (np.random.uniform(0, 1, [1, num_points[ss]]) - 0.5) * noise_b,
-                         2 * (np.random.uniform(0, 1, [(D - 1), num_points[ss]]) - 0.5) * sq_side))
-      SVD = np.linalg.svd(
-        np.eye(D) - (1 / np.sqrt(np.dot(normals[:, ss], normals[:, ss]))) * np.outer(normals[:, ss], normals[:, ss]))
-      U = np.fliplr(SVD[0])
-      X_tmp = np.matmul(U, X_tmp)
-      X[:, k:(k + num_points[ss])] = X_tmp
-      ss_ind[k:(k + num_points[ss])] = ss * np.ones((num_points[ss], 1))
-      k = k + num_points[ss]
-    return X, ss_ind
+  N = np.sum(num_points)
+  [D, S] = normals.shape
+  X = np.zeros([D, N])
+  ss_ind = np.zeros([N, 1])
+  k = 0
+  for ss in range(S):
+    X_tmp = np.vstack((2*(np.random.uniform(0,1,[1,num_points[ss]]) - 0.5)*noise_b,2*(np.random.uniform(0,1,[(D-1),num_points[ss]]) - 0.5)*sq_side))
+    SVD = np.linalg.svd(np.eye(D)-(1/np.sqrt(np.dot(normals[:,ss],normals[:,ss])))*np.outer(normals[:,ss],normals[:,ss]))
+    U = np.fliplr(SVD[0])
+    X_tmp = np.matmul(U, X_tmp)
+    X[:,k:(k+num_points[ss])] = X_tmp
+    ss_ind[k:(k+num_points[ss])] = ss*np.ones((num_points[ss],1))
+    k = k + num_points[ss]
+  return X, ss_ind
