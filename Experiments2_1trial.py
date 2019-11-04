@@ -18,7 +18,7 @@ RwHopt = RwHoptCond(10, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
 eps = 0.2  # Noise bound
 method_name = ['Full', 'Cheng', 'CDC New']
-method = 0  # 0 - Full, 1 - Cheng, 2 - CDC New
+method = 1  # 0 - Full, 1 - Cheng, 2 - CDC New
 
 # Data Creation and Ground Truth Plot
 normals = createNormalVectors(D, Ns)

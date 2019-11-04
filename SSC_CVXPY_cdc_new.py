@@ -20,4 +20,31 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
     #          - rankness: rankness of every iteration
     # Define dimension and number of points
 
+    # Define dimension and number of points
+    [D, Np] = Xp.shape
+    Nm = 1 + Ns * (Np + D)  # Size of the overall matrix
+
+    # Define index entries
+    ind_r = lambda i, d: (1 + i * D + d)
+    ind_s = lambda i, j: (1 + Ns * D + j * Ns + i)
+
+    # Create variables
+    M = []  # size Ns x Np
+    R = []  # size Ns x 1
+    W = []  # size Ns x 1
+    t = cp.Variable((Ns, 1))
+    S = cp.Variable((Ns, Np))
+    for i in range(Ns):
+        R.append(cp.Variable(1+D))
+        W.append(np.eye(1 + D) + delta*np.random.randn(1 + D, 1 + D))
+        for j in range(Np):
+            M[i].append(cp.Variable((2 + D, 2 + D)))
+
+    C = []
+
+
+
+
+
+
     return R, S, runtime, rank1ness

@@ -27,7 +27,6 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
     ind_s = lambda i, j: (1 + Ns * D + j * Ns + i)
 
     # Create variables
-    tic = time()
     M = []
     for j in range(0, Np):  # For each point
         M.append(cp.Variable((1 + Ns * D + Ns, 1 + Ns * D + Ns), PSD=True))  # M[j] should be PSD
@@ -53,6 +52,7 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
     bestR = R
     bestM = M
 
+    tic = time()
     for iter in range(0, RwHopt.maxIter):
         print('   - R.H. iteration: ', iter)
         objective = cp.Minimize(cp.trace(W.T * R))
