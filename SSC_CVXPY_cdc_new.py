@@ -40,7 +40,10 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
         for j in range(Np):
             M[i].append(cp.Variable((2 + D, 2 + D)))
 
-    C = []
+    C = []  # Constraints that are fixed through iterations
+    Citer = []  # Constraints that change throughout iterations
+    for i in range(Ns):  # For each subspace
+        C.append(R[i][0,0] == 1)
 
 
 
