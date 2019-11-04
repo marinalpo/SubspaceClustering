@@ -1,6 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from time import time
+from utils import *
 
 def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     # Subspace Clustering using CVXPY, Naive implementation
@@ -16,8 +17,8 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     #          - S: NsxNp matrix, with labels for each point and subspace
     #          - runtime: runtime of the algorithm (excluding solution extraction)
     #          - rankness: rankness of every iteration
-    # Define dimension and number of points
 
+    # Define dimension and number of points
     [D, Np] = Xp.shape
     Nm = 1 + Ns * (Np + D)  # Size of the overall matrix
     Nc = 1 + Ns * D  # Size of the top left corner
@@ -30,6 +31,7 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     # Create variables
     X = cp.Variable((Nm, Nm), PSD=True)  # X is PSD
     C = []  # Fixed constraints
+
     for i in range(Ns):  # For each subspace
         ind = ind_r(i, (np.arange(D)))
         C = C + [cp.trace(X[np.ix_(ind, ind)]) == 1]  # (8d) Subspace normals have norm 1
@@ -51,32 +53,35 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     # Solve the problem with Reweighted Heuristics
     rank1ness = np.zeros([RwHopt.maxIter, 1])
     for iter in range(RwHopt.maxIter):
-        print('   - reweighted h. iteration: ', iter)
-        if RwHopt.corner:
+        print('   - R.H. iteration: ', iter)
+        if RwHopt.corner:  # Rank1 on corner
             M = X[1:Nc, 1:Nc]
-            obj = cp.Maximize(cp.trace(W.T * M))
+            obj = cp.Minimize(cp.trace(W.T * M))
             prob = cp.Problem(obj, C)
             sol = prob.solve(solver=cp.MOSEK, verbose=False)
             [val, vec] = np.linalg.eig(np.float(M.value))
-        else:
-            obj = cp.Maximize(cp.trace(W.T * X))
+        else:  # Rank1 on full matrix
+            obj = cp.Minimize(cp.trace(W.T * X))
             prob = cp.Problem(obj, C)
             sol = prob.solve(solver=cp.MOSEK, verbose=False)
             [val, vec] = np.linalg.eig(np.array(X.value, dtype=np.float))
-        idx = val.argsort()[::-1]
-        sortedval = val[idx]
-        sortedvec = vec[:, idx]
+
+        [sortedval, sortedvec] = sortEigens(val, vec)
         rank1ness_curr = sortedval[0] / np.sum(sortedval)
         rank1ness[iter] = rank1ness_curr
         W = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+
         if np.min(rank1ness[iter]) > RwHopt.eigThres:
+            iter = iter + 1  # To fill rank1ness vector
             break
 
     runtime = time() - tic
     s = X[0, ind_r(Ns - 1, D - 1) + 1:]
     S = cp.reshape(s, (Ns, Np))
-    R = []
+    S = S.value
+    R = np.zeros((Ns, D))
     for i in range(Ns):
-        R.append(X[np.ix_(ind_r(i, (np.arange(0, D))), ind_r(i, (np.arange(0, D))))])
+        R[i, :] = X[ind_r(i, np.arange(0, D)), 0].value
+
     return R, S, runtime, rank1ness
 

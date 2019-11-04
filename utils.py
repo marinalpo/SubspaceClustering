@@ -7,9 +7,16 @@ class RwHoptCond:
     self.maxIter = maxIter # number of max iterations
     self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
     self.corner = corner  # rank-1 on corner (1) or on full matrix (0)
-    
 
-def plotNormalsAndPoints(normals,Xp,ss_ind,t):
+
+def sortEigens(val, vec):
+  idx = val.argsort()[::-1]
+  sortedval = val[idx]
+  sortedvec = vec[:, idx]
+  return sortedval, sortedvec
+
+
+def plotNormalsAndPoints(normals,Xp,ss_ind,t,last):
   # ONLY FOR 2 DIMENSIONS AND UP TO 7 SUBSPACES
   c = ['r','b','g','m','c','k','y']
   [a, Ns] = normals.shape
@@ -22,7 +29,8 @@ def plotNormalsAndPoints(normals,Xp,ss_ind,t):
       plt.scatter(Xs[0,:], Xs[1,:], c=c[i], edgecolors='k')
   plt.axis((-5,5,-5,5))
   plt.title(t)
-  plt.show()
+  if last:
+    plt.show()
 
 
 def createNormalVectors(D, Ns):
