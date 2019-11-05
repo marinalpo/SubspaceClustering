@@ -26,7 +26,6 @@ num_points = np.hstack([np.ones((1,Ns-1))*np.round(Np/Ns), np.ones((1,1))*(Np-(N
 Xp, ss_ind = generatePoints(normals, num_points[0].astype(int), eps, 5)
 plt.figure(1)
 plotNormalsAndPoints(normals,Xp,ss_ind,'Ground Truth',0)
-
 print('METHOD:', method_name[method])
 print(D, 'dimensions, ', Ns, 'subspaces and ', Np, 'points (',num_points[0][0].astype(int), 'per subspace )')
 

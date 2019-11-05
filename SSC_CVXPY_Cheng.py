@@ -29,7 +29,8 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
     # Create variables
     M = []
     for j in range(0, Np):  # For each point
-        M.append(cp.Variable((1 + Ns * D + Ns, 1 + Ns * D + Ns), PSD=True))  # M[j] should be PSD
+        m = cp.Variable((1 + Ns * D + Ns, 1 + Ns * D + Ns), PSD=True)
+        M.append(m)  # M[j] should be PSD
 
     R = cp.Variable((1 + Ns * D, 1 + Ns * D))
     C = []  # Constraints that are fixed through iterations
@@ -63,8 +64,8 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
         rank1ness[iter] = sortedval[0] / np.sum(sortedval)
         W = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
 
-        if max(rank1ness) == rank1ness[iter]:
-            bestR = R.value
+        # if max(rank1ness) == rank1ness[iter]:
+        #     bestR = R.value
 
         if rank1ness[iter] > RwHopt.eigThres:
             iter = iter + 1  # To fill rank1ness vector
