@@ -78,7 +78,7 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
         for i in range(Ns):
             val, vec = np.linalg.eig(R[i].value)
             [sortedval, sortedvec] = sortEigens(val, vec)
-            sortedvec = vec
+            # sortedvec = vec
             rank1ness[iter,i] = sortedval[0] / np.sum(sortedval)
             W[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
             Citer.append(t[i] == cp.trace(W[i].T*R[i]))
