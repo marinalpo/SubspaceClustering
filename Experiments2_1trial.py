@@ -5,8 +5,10 @@ from utils import *
 from SSC_CVXPY_Full import *
 from SSC_CVXPY_Cheng import *
 from SSC_CVXPY_cdc_new import *
+from os.path import dirname, join as pjoin
+import scipy.io as sio
 
-np.random.seed(7)
+np.random.seed(1)
 
 # Parameters Configuration
 Ns = 3  # Number of subspaces
@@ -14,20 +16,31 @@ D = 2  # Number of dimensions
 Npoints = Ns*(np.arange(20)+1)  # Number of points per dimension
 k = 8
 Np = Npoints[k]
-RwHopt = RwHoptCond(2, 0.97, 0)  # Conditions for reweighted heuristics
+RwHopt = RwHoptCond(10, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
 eps = 0.2  # Noise bound
 method_name = ['Full', 'Cheng', 'CDC New']
 method = 2  # 0 - Full, 1 - Cheng, 2 - CDC New
-
-# Data Creation and Ground Truth Plot
-normals = createNormalVectors(D, Ns)
+random_data = False
 num_points = np.hstack([np.ones((1,Ns-1))*np.round(Np/Ns), np.ones((1,1))*(Np-(Ns-1)*np.round(Np/Ns))])
-Xp, ss_ind = generatePoints(normals, num_points[0].astype(int), eps, 5)
+
+# Data Creation
+if random_data:
+    normals = createNormalVectors(D, Ns)
+    Xp, ss_ind = generatePoints(normals, num_points[0].astype(int), eps, 5)
+else:  # Load MATLAB generated data
+    matlab_data = sio.loadmat('/Users/marinaalonsopoal/PycharmProjects/SubspaceClustering/data/load/Xp_seed1_2D_3Ns_18points.mat')
+    # matlab_data = sio.loadmat('/Users/marinaalonsopoal/PycharmProjects/SubspaceClustering/data/load/Xp_seed7_2D_3Ns_27points.mat')
+    normals = matlab_data['Normals']
+    Xp = matlab_data['Xp']
+    ss_ind = matlab_data['ss_ind'] - 1
+
+# Plot Ground Truth and print configuration
 plt.figure(1)
 plotNormalsAndPoints(normals,Xp,ss_ind,'Ground Truth',0)
-print('METHOD:', method_name[method])
+print('Method:', method_name[method])
 print(D, 'dimensions, ', Ns, 'subspaces and ', Np, 'points (',num_points[0][0].astype(int), 'per subspace )')
+print('Random Data: ', random_data)
 
 # Problem Solving
 if method == 0:

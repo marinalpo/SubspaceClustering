@@ -100,21 +100,20 @@ def plotLinesAndPoints(Xline, Xp, Npoly, num_points):
         y = Xp[1, ini:fin]
         plt.plot(xline, yline, color=c[p])
         plt.scatter(x[:], y[:], c=c[p], edgecolors='k')
-    plt.title('Polynomials')
-    #plt.axis((-sq_size,sq_size,-sq_size,sq_size))
+    plt.title('Ground Truth')
     plt.show()
 
 
-D = 2  # Number of dimensions
-Npoly = 2 # Number of polynomials
-cmax = 10  # Absolute maximum value of the polynomials coefficients
-degmax = 3  # Maximum value of the polynomials degree
-noise_b = 500  # Noise bound
-Np = 15  # Constant Np points per polynomial
-num_points = (Np * np.ones(Npoly)).astype(int)  # Number of points per polynomial
-sq_size = 10  # Horizontal sampling window
-
-(C, A) = createPolynomials(D, Npoly, degmax, cmax)
-(Xp, ss_ind) = generatePointsPoly(C, A, num_points, noise_b, sq_size)
-Xline = generatePointsLines(C, A, sq_size)
-plotLinesAndPoints(Xline, Xp, Npoly, num_points)
+# D = 2  # Number of dimensions
+# Npoly = 2 # Number of polynomials
+# cmax = 10  # Absolute maximum value of the polynomials coefficients
+# degmax = 3  # Maximum value of the polynomials degree
+# noise_b = 500  # Noise bound
+# Np = 15  # Constant Np points per polynomial
+# num_points = (Np * np.ones(Npoly)).astype(int)  # Number of points per polynomial
+# sq_size = 10  # Horizontal sampling window
+#
+# (C, A) = createPolynomials(D, Npoly, degmax, cmax)
+# (Xp, ss_ind) = generatePointsPoly(C, A, num_points, noise_b, sq_size)
+# Xline = generatePointsLines(C, A, sq_size)
+# plotLinesAndPoints(Xline, Xp, Npoly, num_points)

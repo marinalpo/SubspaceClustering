@@ -64,9 +64,6 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
         rank1ness[iter] = sortedval[0] / np.sum(sortedval)
         W = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
 
-        # if max(rank1ness) == rank1ness[iter]:
-        #     bestR = R.value
-
         if rank1ness[iter] > RwHopt.eigThres:
             iter = iter + 1  # To fill rank1ness vector
             break
