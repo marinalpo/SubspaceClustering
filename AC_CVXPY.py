@@ -2,30 +2,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 np.random.seed(2020)
 
-def createPolynomials(D, Npoly, degmax, cmax):
+def dataLift1D(Xp, n):
+    [D, Np_total] = Xp.shape
+    V = np.zeros((n+2, Np_total))
+    x = Xp[0,:]
+    for i in range(n + 1):
+        V[i,:] = np.power(x,i)
+    V[-1,:] = Xp[1,:]
+    return V
+
+def dataUnlift1D(R, n):
+    [D, Np_total] = Xp.shape
+    V = np.zeros((n+2, Np_total))
+    x = Xp[0,:]
+    for i in range(n + 1):
+        V[i,:] = np.power(x,i)
+    V[-1,:] = Xp[1,:]
+    return V
+
+def createPolynomials(D, Npoly, alpha, cmax):
     # Generates Npoly polynomials defined by its coefficients and powers
     # Inputs: - D: Dimension (fixed to 2 at this moment)
     #         - Npoly: Number of polynomials to be created
-    #         - degmax: Maximum value of the polynomials degree
+    #         - alpha: Powers of all polynomials
     #         - cmax: Absolute maximum value of the polynomials coefficients
     # Outputs: - C: Array containing the coefficients of each polynomial
-    #          - A: Array containing the powers of each polynomial
     C = []
-    A = []
-    deg = np.zeros((Npoly, 2))
     for p in range(Npoly):  # for each polynomial
-        deg[p,1] = np.random.randint(1, degmax + 1)
-        deg[p,0] = np.random.randint(0, deg[p,1])
         print('Polynomial ', p)
-        print(' - deg:', deg[p,:])
-        alpha = np.arange(deg[p,0], deg[p,1] + 1)
         print(' - alpha:', alpha)
         c = np.random.randint(-cmax, cmax, size=len(alpha))
         print(' - c:', c)
         print('\n')
         C.append(c)
-        A.append(alpha)
-    return C, A
+    return C
 
 def evaluatePoly(x, c, alpha):
     # Evaluates polynomial defined by c and alpha in all points of vector x
@@ -35,13 +45,13 @@ def evaluatePoly(x, c, alpha):
     # Outputs: - y: Array containing polynomial evaluations of x
     y = np.zeros(len(x))
     for i in range(len(c)):
-        y = y + c[i]*np.power(x,alpha[i])
+        y = y + c[i]*np.power(x, alpha[i])
     return y
 
-def generatePointsPoly(C, A, num_points, noise_b, sq_size):
+def generatePointsPoly(C, alpha, num_points, noise_b, sq_size):
     # Generates noisy points corresponding to different polynomials
     # Inputs: - C: Array containing the coefficients of each polynomial
-    #         - A: Array containing the powers of each polynomial
+    #         - alpha: Array containing the powers of the polynomials
     #         - num_points: Array containing number of points per polynomial
     #         - noise_b: Noise bound
     #         - sq_size: Horizontal sampling window
@@ -53,7 +63,7 @@ def generatePointsPoly(C, A, num_points, noise_b, sq_size):
     Xp = np.zeros([2, N])  # For multidimension change 2 for D
     for p in range(Npoly):  # For each poly
         x = np.random.uniform(-sq_size,sq_size,num_points[0])
-        y = evaluatePoly(x, C[p], A[p]) + noise_b * np.random.uniform(-1,1,num_points[0])
+        y = evaluatePoly(x, C[p], alpha) + noise_b * np.random.uniform(-1,1,num_points[0])
         ini = np.sum(num_points[0:p])
         fin = np.sum(num_points[0:(p+1)])
         Xp[0,ini:fin] = x
@@ -61,7 +71,7 @@ def generatePointsPoly(C, A, num_points, noise_b, sq_size):
         ss_ind[ini:fin] = p
     return Xp, ss_ind
 
-def generatePointsLines(C, A, sq_size):
+def generatePointsLines(C, alpha, sq_size):
     # Generates dense points corresponding to different polynomials
     # Inputs: - C: Array containing the coefficients of each polynomial
     #         - A: Array containing the powers of each polynomial
@@ -73,7 +83,7 @@ def generatePointsLines(C, A, sq_size):
     Xline = np.zeros([2, Npoly * pointsxpoly])  # For multidimension change 2 for D
     for p in range(Npoly):
         x = np.arange(-sq_size,sq_size, step)
-        y = evaluatePoly(x, C[p], A[p])
+        y = evaluatePoly(x, C[p], alpha)
         ini = pointsxpoly*p
         fin = pointsxpoly*(p+1)
         Xline[0, ini:fin] = x

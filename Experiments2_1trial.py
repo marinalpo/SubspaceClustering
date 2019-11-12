@@ -8,13 +8,13 @@ from SSC_CVXPY_cdc_new import *
 from os.path import dirname, join as pjoin
 import scipy.io as sio
 
-np.random.seed(1)
+# np.random.seed(267)
 
 # Parameters Configuration
 Ns = 3  # Number of subspaces
 D = 2  # Number of dimensions
 Npoints = Ns*(np.arange(20)+1)  # Number of points per dimension
-k = 8
+k = 5
 Np = Npoints[k]
 RwHopt = RwHoptCond(10, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
@@ -30,7 +30,7 @@ if random_data:
     Xp, ss_ind = generatePoints(normals, num_points[0].astype(int), eps, 5)
 else:  # Load MATLAB generated data
     matlab_data = sio.loadmat('/Users/marinaalonsopoal/PycharmProjects/SubspaceClustering/data/load/Xp_seed1_2D_3Ns_18points.mat')
-    # matlab_data = sio.loadmat('/Users/marinaalonsopoal/PycharmProjects/SubspaceClustering/data/load/Xp_seed7_2D_3Ns_27points.mat')
+    # matlab_data = sio.loadmat('/Users/marinaalonsopoal/PycharmProjects/SubspaceClustering/data/load/Xp_seed267_2D_3Ns_27points.mat')
     normals = matlab_data['Normals']
     Xp = matlab_data['Xp']
     ss_ind = matlab_data['ss_ind'] - 1
