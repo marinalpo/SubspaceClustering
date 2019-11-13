@@ -90,7 +90,7 @@ def exponent_nk(n, K):
         return exp
 
 
-def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
+def veronese_nk(x, n, if_coffiecnt=False):
     '''
      Computes the Veronese map of degree n, that is all
      the monomials of a certain degree.
@@ -108,10 +108,7 @@ def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
         assert n == 2
     K, N = x.shape[0], x.shape[1]
     powers = exponent_nk(n, K)
-    if if_cuda:
-        powers = torch.tensor(powers, dtype=torch.float).cuda()
-    else:
-        powers = torch.tensor(powers, dtype=torch.float)
+    powers = torch.tensor(powers, dtype=torch.float)
     if n == 0:
         y = 1
     elif n == 1:
@@ -119,7 +116,7 @@ def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
     else:
         s = []
         for i in range(0, powers.shape[0]):
-            tmp = x.t().pow(powers[i, :])
+            tmp = x.t().pow(powers[i, :].long())
             ttmp = tmp[:, 0]
             for j in range(1, tmp.shape[1]):
                 ttmp = torch.mul(ttmp, tmp[:, j])
@@ -137,7 +134,6 @@ def generate_veronese(x, n):
         @param n: the veronese map will be up to degree n
 
         Output: the complete veronese map of x (veronese_dim, BS)
-        Example:
         if x is a two dimensional vector x = [x1 x2]
         generate_veronese(x, 2) ==> [1 x1 x2 x1^2 x1*x2 x2^2]
         generate_veronese(x, 3) ==> [1 x1 x2 x1^2 x1*x2 x2^2 x1^3 x1^2*x2 x1*x2^2 x2^3]
@@ -145,7 +141,7 @@ def generate_veronese(x, n):
     v_x = x
     p_x = None
     for i in range(0, n - 1):
-        v_x_n, p_n = veronese_nk(x, i + 2, if_cuda=False, if_coffiecnt=False )
+        v_x_n, p_n = veronese_nk(x, i + 2, if_coffiecnt=False )
         v_x = torch.cat([v_x, v_x_n], dim=0)
-    v_x = torch.cat([torch.ones(1, v_x.size()[1]), v_x])
+    v_x = torch.cat([torch.ones(1, v_x.size()[1]).long(), v_x])
     return v_x, p_x
