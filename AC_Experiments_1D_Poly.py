@@ -7,7 +7,7 @@ from SSC_CVXPY_Full import *
 from SSC_CVXPY_Cheng import *
 from SSC_CVXPY_cdc_new import *
 
-np.random.seed(1)
+np.random.seed(2)
 
 # Parameters Configuration
 Npoly = 2  # Number of polynomials

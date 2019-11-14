@@ -157,3 +157,118 @@ def plotLinesAndPointsPredicted(Xline, Xline_pluseps, Xline_minuseps, Xp,  Npoly
 # (Xp, ss_ind) = generatePointsPoly(C, A, num_points, noise_b, sq_size)
 # Xline = generatePointsLines(C, A, sq_size)
 # plotLinesAndPoints(Xline, Xp, Npoly, num_points)
+
+
+
+def findXRange(coef, eps):
+    # xrange[p, 0] - lower root
+    # xrange[p, 1] - higher root
+    # xrange[p, 2] - 1 if polynomial has no roots
+    # xrange[p, 3] - 0 if polynomial is CONVEX, 1 if it is CONCAVE
+    (Npoly, D_lift) = coef.shape
+    xrange = np.zeros((Npoly, 4))
+    noRoots = False
+    concave = True
+    x = np.arange(-10,10,0.1)
+    for p in range(Npoly):
+        a = np.power(coef[p, 4], 2) - 4*coef[p, 5]*coef[p, 3]
+        b = - 4*coef[p, 5]*coef[p, 1]
+        c = np.power(coef[p, 2], 2) + 2*coef[p, 2]*coef[p, 4] - 4*coef[p, 5]*coef[p, 0] + 4*coef[p, 5]*eps
+        dis = np.power(b,2) - 4 * np.multiply(a, c)
+        sol1 = (-b - np.sqrt(dis)) / (2 * a)
+        sol2 = (-b + np.sqrt(dis)) / (2 * a)
+        xrange[p, 0] = np.min([sol1, sol2])
+        xrange[p, 1] = np.max([sol1, sol2])
+        if np.isnan(xrange[p,0]):
+            xrange[p,2] = 1
+            if c < 0:
+                xrange[p, 3] = 1
+        else:
+            xmid = 0.5*(xrange[p,0] + xrange[p,1])
+            y_xmid = c + b*xmid + a*np.power(xmid,2)
+            if y_xmid > 0:
+                xrange[p, 3] = 1
+    # print('xrange:\n', np.around(xrange, decimals = 1))
+    return xrange
+
+def generateXpoints(xrange, Np, sq_size, random):
+    (Npoly, d) = xrange.shape
+    xp = np.zeros((Npoly, Np))
+    delPol = []
+    for p in range(Npoly):
+        if xrange[p, 2] == 0:  # Roots are real
+            if xrange[p, 3] == 0:  # Polynomial is convex
+                if random:
+                    xp1 = np.random.uniform(-sq_size, xrange[p,0], int(Np/2))
+                    xp2 = np.random.uniform(xrange[p,1], sq_size, int(Np/2))
+                    xp[p, :] = np.hstack((xp1[:int(Np/2)], xp2[:int(Np/2)]))
+                else:
+                    xp1 = np.arange(-sq_size, xrange[p,0], (xrange[p,0]+sq_size)/(int(Np/2)))
+                    xp2 = np.arange(xrange[p,1], sq_size, (sq_size-xrange[p,1])/(int(Np/2)))
+                    xp[p, :] = np.hstack((xp1[:int(Np/2)], xp2[:int(Np/2)]))
+            else:  # Polynomial is concave
+                if random:
+                    xp[p, :] = np.random.uniform(xrange[p,0], xrange[p,1], Np)
+                else:
+                    xp[p, :] = np.arange(xrange[p,0], xrange[p,1], (xrange[p,1]-xrange[p,0])/(Np-0.5))
+        else:  # No real roots
+            if xrange[p, 3] == 0:  # Polynomial is convex
+                if random:
+                    xp[p, :] = np.random.uniform(-sq_size, sq_size, Np)
+                else:
+                    xp[p, :] = np.arange(-sq_size, sq_size, (2*sq_size) / Np)
+            else:
+                print('Polynomial is concave without real roots. It will not be considered')
+                delPol.append(p)
+    # print('xp:\n', np.around(xp, decimals=1))
+    return xp, delPol
+
+
+def generateYp(xp, coef, sq_size, eps, GT, sol_num):
+    (Npoly, Np) = xp.shape
+    yp = np.zeros((Npoly,Np))
+    sol = np.zeros((2,Np))
+    cul = ['r', 'b', 'g', 'm', 'c', 'k', 'y']
+    labels = np.zeros((Npoly, Np))
+    for p in range(Npoly):
+        a = coef[p,5] * np.ones(Np)
+        b = coef[p,2] + coef[p,4]*xp[p,:]
+        if GT:
+            c = coef[p, 0] + coef[p, 1] * xp[p, :] + coef[p, 3] * np.power(xp[p, :], 2) + eps
+        else:
+            c = coef[p, 0] + coef[p, 1] * xp[p, :] + coef[p, 3] * np.power(xp[p, :], 2) - np.random.uniform(-eps, eps,
+                                                                                                            size=(
+                                                                                                            1, Np))
+        dis = np.power(b,2) - 4 * np.multiply(a, c)
+        sol[0,:] = (-b - np.sqrt(dis)) / (2 * a)
+        sol[1,:] = (-b + np.sqrt(dis)) / (2 * a)
+        if GT:
+            yp[p, :] = sol[sol_num,:]
+        else:
+            sol_idx = np.random.randint(2, size =(1,Np))
+            yp[p, :] = sol[sol_idx, np.arange(Np)]
+        labels[p,:] = p * np.ones((1, Np))
+        # plt.scatter(xp[p, :], yp[p, :], c=cul[p])
+    # plt.axis((- sq_size, sq_size, - sq_size, sq_size))
+    # plt.show()
+    return yp, labels
+
+
+def plotGT(coef, xp, yp, sq_size, eps):
+    (Npoly, Np) = xp.shape
+    Np_GT = int(1e5)  # Number of points per polynomial to plot GT
+    noise = [0, eps, -eps]
+    l = ['-', ':', ':']
+    cul = ['r', 'b', 'g', 'm', 'c', 'k', 'y']
+    xp_GT = np.arange(-sq_size, sq_size, (2 * sq_size) / Np_GT)
+    xp_GT = np.tile(xp_GT, (Npoly, 1))
+    for i in range(3):
+        yp_GT_1, labels_GT = generateYp(xp_GT, coef, sq_size, noise[i], True, 0)
+        yp_GT_2, labels_GT = generateYp(xp_GT, coef, sq_size, noise[i], True, 1)
+        for p in range(Npoly):
+            plt.plot(xp_GT[p, :], yp_GT_1[p, :], c=cul[p], linestyle = l[i])
+            plt.plot(xp_GT[p, :], yp_GT_2[p, :], c=cul[p], linestyle = l[i])
+            plt.scatter(xp[p, :], yp[p, :], color=cul[p], edgecolors='k')
+    plt.title('Ground Truth')
+    plt.axis((- sq_size, sq_size, - sq_size, sq_size))
+    #  If axis are limited, there might be points that are created but not shown in the plot
