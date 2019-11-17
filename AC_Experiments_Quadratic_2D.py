@@ -14,16 +14,15 @@ from math import pi
 np.random.seed(2)
 
 # Parameters Configuration
-Npoly = 4  # Number of polynomials
+Npoly = 3  # Number of polynomials
 D = 2  # Number of dimensions ( D=2 -> p(x,y) )
 degmax = 2  # Maximum value of the polynomials degree
 cmax = 10  # Absolute maximum value of the polynomials coefficients
 
-
-Np = 6  # EVEN. Constant Np points per polynomial
+Np = 5  # EVEN. Constant Np points per polynomial
 num_points = (Np * np.ones(Npoly)).astype(int)  # Number of points per polynomial
-eps = 3 # Noise bound
-sq_size = 5  # Horizontal sampling window
+eps = 5 # Noise bound
+sq_size = 10  # Horizontal sampling window
 
 RwHopt = RwHoptCond(10, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
@@ -34,30 +33,22 @@ method = 2  # 0 - Full, 1 - Cheng, 2 - CDC New
 alpha = exponent_nk(degmax, D)
 D_lift = comb(D + degmax, degmax, exact=False)  # Length of the Veronesse map
 coef = np.random.randint(-cmax, cmax, (2*Npoly, D_lift.astype(int)))
-# coef = np.array([[-119, -27, -25, 9, 0, 25], [-1, 0, 0, 1, 1, 1]])  # Coefs. from two ellipses
+# coef = np.array([[ 5, -5, -3, -7, -4, -6]])
+# coef = np.array([[ -3, 3, -4, 8, -5, 8]])
+print('coef:', coef)
 
-xrange = findXRange(coef, 0)
-xp, delPol = generateXpoints(xrange, Np, sq_size, True)
-# Delete polynomials with no real roots
-coef = np.delete(coef, delPol, 0)
-coef = coef[0:Npoly, :]
-xp = np.delete(xp, delPol, 0)
-xp = xp[0:Npoly, :]
+xPointsRange, typeRange, coef = findXPointsRange(coef, eps, Npoly)
+xp = generateXpoints(xPointsRange, typeRange, Np, sq_size)
 yp, labels = generateYp(xp, coef, sq_size, eps, False, 0)
-
-
 plotGT(coef, xp, yp, sq_size, eps)
-plt.show()
-
-
-
 
 xp = np.array(xp).flatten()
 yp = np.array(yp).flatten()
 labels = np.array(labels).flatten()
 points = np.vstack((xp,yp))
 
-# print('points:\n', np.around(points, decimals = 1))
+print('xrange:', xPointsRange)
+print('points:\n', np.around(points, decimals = 2))
 # print('labels:', np.around(labels, decimals = 1))
 
 # Generate Veronesse
@@ -65,5 +56,4 @@ points_torch = torch.from_numpy(points).long()
 v, p = generate_veronese(points_torch, degmax)
 v = v.numpy()
 # print('veronesse:\n', v)
-
-
+plt.show()
