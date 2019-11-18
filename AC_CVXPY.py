@@ -207,6 +207,7 @@ def findXPointsRange(coef, eps, Npoly):
 
 def generateXpoints(xrange, typeRange, Np, sq_size):
     (Npoly, d) = xrange.shape
+    Np = Np * 5  # Create extra points to avoid NaN s
     xp = np.zeros((Npoly, Np))
     for p in range(Npoly):
         if typeRange[p] == 0:  # CONVEX and roots are real
@@ -220,32 +221,41 @@ def generateXpoints(xrange, typeRange, Np, sq_size):
     return xp
 
 
-def generateYp(xp, coef, sq_size, eps, GT, sol_num):
-    (Npoly, Np) = xp.shape
-    yp = np.zeros((Npoly,Np))
-    sol = np.zeros((2,Np))
+def generateYp(xp, coef, Np, eps, GT, sol_num):
+    (Npoly, Np_extra) = xp.shape
+    xp_out = np.zeros((Npoly, Np))
+    yp_out = np.zeros((Npoly, Np))
+    sol = np.zeros((2, Np_extra))
     labels = np.zeros((Npoly, Np))
     for p in range(Npoly):
-        a = coef[p,5] * np.ones(Np) + 0.000001
+        a = coef[p,5] * np.ones(Np_extra) + 0.000001
         b = coef[p,2] + coef[p,4]*xp[p,:]
         if GT:
             c = coef[p, 0] + coef[p, 1] * xp[p, :] + coef[p, 3] * np.power(xp[p, :], 2) + eps
         else:
-            noise = np.random.uniform(-eps, eps, size=(1, Np))
+            noise = np.random.uniform(-eps, eps, size=(1, Np_extra))
             c = coef[p, 0] + coef[p, 1] * xp[p, :] + coef[p, 3] * np.power(xp[p, :], 2) - noise
         dis = np.power(b,2) - 4 * np.multiply(a, c)
         sol[0,:] = (-b - np.sqrt(dis)) / (2 * a)
         sol[1,:] = (-b + np.sqrt(dis)) / (2 * a)
         if GT:
-            yp[p, :] = sol[sol_num,:]
+            yp_out[p,:] = sol[sol_num,:]
+            xp_out = xp
         else:
-            sol_idx = np.random.randint(2, size =(1,Np))
-            yp[p, :] = sol[sol_idx, np.arange(Np)]
-        labels[p,:] = p * np.ones((1, Np))
-    return yp, labels
+            sol_idx = np.random.randint(2, size =(1, Np_extra))
+            yp = sol[sol_idx, np.arange(Np_extra)]
+            # Delete points with NaN
+            idx_nan = np.where(np.isnan(yp))
+            yp = np.delete(yp, idx_nan)
+            yp_out[p,:] = yp[0:Np]
+            xp_poly = np.delete(xp[p,:], idx_nan, 0 )
+            xp_out[p,:] = xp_poly[0:Np]
+        labels[p, :] = p * np.ones((1, Np))
+
+    return xp_out, yp_out, labels
 
 
-def plotGT(coef, xp, yp, sq_size, eps):
+def plotGT(coef, labels, xp, yp, sq_size, eps, tit):
     (Npoly, Np) = xp.shape
     Np_GT = int(1e5)  # Number of points per polynomial to plot GT
     noise = [0, eps, -eps]
@@ -254,16 +264,61 @@ def plotGT(coef, xp, yp, sq_size, eps):
     xp_GT = np.arange(-sq_size, sq_size, (2 * sq_size) / Np_GT)
     xp_GT = np.tile(xp_GT, (Npoly, 1))
     for i in range(3):
-        yp_GT_1, labels_GT = generateYp(xp_GT, coef, sq_size, noise[i], True, 0)
-        yp_GT_2, labels_GT = generateYp(xp_GT, coef, sq_size, noise[i], True, 1)
+        xp_GT_1, yp_GT_1, labels_GT = generateYp(xp_GT, coef, Np_GT, noise[i], True, 0)
+        xp_GT_2, yp_GT_2, labels_GT = generateYp(xp_GT, coef, Np_GT, noise[i], True, 1)
         for p in range(Npoly):
             plt.plot(xp_GT[p, :], yp_GT_1[p, :], c=cul[p], linestyle = l[i])
             plt.plot(xp_GT[p, :], yp_GT_2[p, :], c=cul[p], linestyle = l[i])
             plt.scatter(xp[p, :], yp[p, :], color=cul[p], edgecolors='k')
-    plt.title('Ground Truth')
+    plt.title(tit)
     textstr = 'Npoly: ' + np.str(Npoly) + '\nNpoints: ' + np.str(Np) + ' (x'+ np.str(Npoly)+ ')'
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    plt.text(- sq_size + 0.5, sq_size - 0.65, textstr, fontsize=10,
-        verticalalignment='top', bbox=props)
-    plt.axis((- sq_size, sq_size, - sq_size, sq_size))
+    sq_size_y = 3 * sq_size
+    plt.text(- sq_size + 0.5, sq_size_y - 0.65, textstr, fontsize=10,
+             verticalalignment='top', bbox=props)
+    plt.axis((- sq_size, sq_size, - sq_size_y, sq_size_y))
+    #  If axis are limited, there might be points that are created but not shown in the plot
+
+
+def plotInput(xp, yp, sq_size):
+    (Npoly, Np) = xp.shape
+    for p in range(Npoly):
+        plt.scatter(xp[p, :], yp[p, :], color='k', edgecolors='k')
+    plt.title('Input to Algorithm\nVeronesse (deg=2) of the points')
+    textstr = 'Npoly: ' + np.str(Npoly) + '\nNpoints: ' + np.str(Np) + ' (x'+ np.str(Npoly)+ ')'
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    sq_size_y = 3 * sq_size
+    plt.text(- sq_size + 0.5, sq_size_y - 0.65, textstr, fontsize=10,
+             verticalalignment='top', bbox=props)
+    plt.axis((- sq_size, sq_size, - sq_size_y, sq_size_y))
+    #  If axis are limited, there might be points that are created but not shown in the plot
+
+
+def plotPredictions(coef, labels, xp, yp, sq_size, eps, tit):
+    (Npoly, Np) = xp.shape
+    xp_flat = np.array(xp).flatten()
+    yp_flat = np.array(yp).flatten()
+    Np_GT = int(1e5)  # Number of points per polynomial to plot GT
+    noise = [0, eps, -eps]
+    l = ['-', ':', ':']
+    cul = ['r', 'b', 'g', 'm', 'c', 'k', 'y']
+    xp_GT = np.arange(-sq_size, sq_size, (2 * sq_size) / Np_GT)
+    xp_GT = np.tile(xp_GT, (Npoly, 1))
+    for i in range(3):
+        xp_GT_1, yp_GT_1, labels_GT = generateYp(xp_GT, coef, Np_GT, noise[i], True, 0)
+        xp_GT_2, yp_GT_2, labels_GT = generateYp(xp_GT, coef, Np_GT, noise[i], True, 1)
+        for p in range(Npoly):
+            idx = np.where(labels == p)
+            xp_poly = xp_flat[idx[0]]
+            yp_poly = yp_flat[idx[0]]
+            plt.plot(xp_GT[p, :], yp_GT_1[p, :], c=cul[p], linestyle=l[i])
+            plt.plot(xp_GT[p, :], yp_GT_2[p, :], c=cul[p], linestyle=l[i])
+            plt.scatter(xp_poly, yp_poly, color=cul[p], edgecolors='k')
+    plt.title(tit)
+    textstr = 'Npoly: ' + np.str(Npoly) + '\nNpoints: ' + np.str(Np) + ' (x' + np.str(Npoly) + ')'
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    sq_size_y = 3 * sq_size
+    plt.text(- sq_size + 0.5, sq_size_y - 0.65, textstr, fontsize=10,
+             verticalalignment='top', bbox=props)
+    plt.axis((- sq_size, sq_size, - sq_size_y, sq_size_y))
     #  If axis are limited, there might be points that are created but not shown in the plot
