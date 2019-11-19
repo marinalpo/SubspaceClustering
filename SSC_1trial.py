@@ -8,20 +8,20 @@ from SSC_CVXPY_cdc_new import *
 from os.path import dirname, join as pjoin
 import scipy.io as sio
 
-# np.random.seed(267)
+np.random.seed(3)
 
 # Parameters Configuration
 Ns = 3  # Number of subspaces
 D = 2  # Number of dimensions
 Npoints = Ns*(np.arange(20)+1)  # Number of points per dimension
-k = 5
+k = 11
 Np = Npoints[k]
 RwHopt = RwHoptCond(10, 0.97, 0)  # Conditions for reweighted heuristics
 delta = 0.1
-eps = 0.2  # Noise bound
+eps = 0.3  # Noise bound
 method_name = ['Full', 'Cheng', 'CDC New']
 method = 2  # 0 - Full, 1 - Cheng, 2 - CDC New
-random_data = False
+random_data = True
 num_points = np.hstack([np.ones((1,Ns-1))*np.round(Np/Ns), np.ones((1,1))*(Np-(Ns-1)*np.round(Np/Ns))])
 
 # Data Creation
