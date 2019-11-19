@@ -2,9 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tempfile import TemporaryFile
 from utils import *
-from SSC_CVXPY_Full import *
-from SSC_CVXPY_Cheng import *
-from SSC_CVXPY_cdc_new import *
+from methods import *
 from os.path import dirname, join as pjoin
 import scipy.io as sio
 

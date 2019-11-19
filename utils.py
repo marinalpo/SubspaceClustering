@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class RwHoptCond:
-    # conditions for reweighted heuristic
+    # Conditions for reweighted heuristic
     def __init__(self, maxIter, eigThres, corner):
         self.maxIter = maxIter  # number of max iterations
         self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
@@ -13,6 +13,7 @@ class RwHoptCond:
 
 
 def sortEigens(val, vec):
+    # Sort Eigenvalues in a descending order and sort its corresponding Eigenvectors
     idx = val.argsort()[::-1]
     sortedval = val[idx]
     sortedvec = vec[:, idx]
@@ -20,7 +21,7 @@ def sortEigens(val, vec):
 
 
 def plotNormalsAndPoints(normals, Xp, ss_ind, t, last):
-    # ONLY FOR 2 DIMENSIONS AND UP TO 7 SUBSPACES
+    # WARNING: Only for D = 2 and up to 7 Ns
     c = ['r', 'b', 'g', 'm', 'c', 'k', 'y']
     [a, Ns] = normals.shape
     for i in range(Ns):
@@ -76,8 +77,13 @@ def generatePoints(normals, num_points, noise_b, sq_side):
 
 
 def exponent_nk(n, K):
+    #
+    # Inputs: - n: Degree of the Veronese map
+    #         - K: Sx1 vector with the number of points to be sampled in each subspace
+    # Outputs: - exp: DxN matrix with the N points
     id = np.diag(np.ones(K))
     exp = id
+
     for i in range(1, n):
         rene = np.asarray([])
         for j in range(0, K):
@@ -91,13 +97,13 @@ def exponent_nk(n, K):
     return exp
 
 
-def veronese_nk(x, n, if_coffiecnt=False):
+def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
     '''
      Computes the Veronese map of degree n, that is all
      the monomials of a certain degree.
      x is a K by N matrix, where K is dimension and N number of points
      y is a K by Mn matrix, where Mn = nchoosek(n+K-1,n)
-     powers is a K by Mn matrix with the exponent of each monomial
+     powes is a K by Mn matrix with the exponent of each monomial
 
      Example veronese([x1;x2],2) gives
      y = [x1^2;x1*x2;x2^2]
@@ -105,19 +111,32 @@ def veronese_nk(x, n, if_coffiecnt=False):
 
      Copyright @ Rene Vidal, 2003
     '''
+
     if if_coffiecnt:
         assert n == 2
     K, N = x.shape[0], x.shape[1]
     powers = exponent_nk(n, K)
-    powers = torch.tensor(powers, dtype=torch.float)
+    if if_cuda:
+        powers = torch.tensor(powers, dtype=torch.float)
+
+    else:
+        powers = torch.tensor(powers, dtype=torch.float)
     if n == 0:
         y = 1
     elif n == 1:
         y = x
     else:
+        # x[x <= 1e-10] = 1e-10
+        # y = np.real(np.exp(np.matmul(powers, np.log(x))))
         s = []
         for i in range(0, powers.shape[0]):
-            tmp = x.t().pow(powers[i, :].long())
+            # if powers[i, :].sum() == 0:
+            #     s.append(torch.ones([1, x.shape[1]]))
+            # else:
+            #     tmp = x.t().pow(powers[i, :])
+            #     ind = torch.ge(powers[i, :].expand_as(tmp), 1).float()
+            #     s.append(torch.mul(tmp, ind).sum(dim=1).unsqueeze(dim=0))
+            tmp = x.t().pow(powers[i, :])
             ttmp = tmp[:, 0]
             for j in range(1, tmp.shape[1]):
                 ttmp = torch.mul(ttmp, tmp[:, j])
@@ -135,16 +154,20 @@ def generate_veronese(x, n):
         @param n: the veronese map will be up to degree n
 
         Output: the complete veronese map of x (veronese_dim, BS)
+        Example:
         if x is a two dimensional vector x = [x1 x2]
         generate_veronese(x, 2) ==> [1 x1 x2 x1^2 x1*x2 x2^2]
         generate_veronese(x, 3) ==> [1 x1 x2 x1^2 x1*x2 x2^2 x1^3 x1^2*x2 x1*x2^2 x2^3]
     """
     v_x = x
+
     p_x = None
     for i in range(0, n - 1):
-        v_x_n, p_n = veronese_nk(x, i + 2, if_coffiecnt=False)
+        v_x_n, p_n = veronese_nk(x, i + 2, if_cuda=False, if_coffiecnt=False, )
+
         v_x = torch.cat([v_x, v_x_n], dim=0)
-    v_x = torch.cat([torch.ones(1, v_x.size()[1]).long(), v_x])
+
+    v_x = torch.cat([torch.ones(1, v_x.size()[1]).float(), v_x.float()])
     return v_x, p_x
 
 
@@ -165,45 +188,65 @@ def findXPointsRange(coef, eps, Npoly):
     delPol = []
     (Npoly_ext, d) = coef.shape
     xPointsRange = np.zeros((Npoly_ext, 2))
-    typeRange = np.zeros(Npoly)
-    for p in range(Npoly):
+    typeRange = np.zeros(Npoly_ext)
+    for p in range(Npoly_ext):
         xrange, a, b, c = findXRange(coef[p, :], 0)
         if np.isnan(xrange[0]):  # range has no real roots
             typeRange[p] = 2
             xPointsRange[p, :] = xrange
             if c < 0:  # range is CONCAVE
-                print('Polynomial is concave without real roots. It will not be considered')
+                # Polynomial is concave without real roots. It will not be considered
                 delPol.append(p)
         else:
             xmid = 0.5*(xrange[0] + xrange[1])
             y_xmid = c + b*xmid + a*np.power(xmid, 2)
             if y_xmid > 0:
                 typeRange[p] = 1  # range is CONCAVE
-                xrange, a, b, c = findXRange(coef[p, :], -eps)
-                xPointsRange[p, :] = xrange
+                xrange_meps, a, b, c = findXRange(coef[p, :], -eps)
+                if np.isnan(xrange_meps[0]):
+                    xrange_meps = 1e-5 * np.ones(2)
+                xrange_eps, a, b, c = findXRange(coef[p, :], eps)
+                if np.isnan(xrange_eps[0]):
+                    xrange_eps = 1e-5 * np.ones(2)
+                if xrange_eps[1] > xrange_meps[1]:  # Polynomial is a "bowl"
+                    xPointsRange[p, :] = xrange_eps
+                else:  # Polynomial is a "hat"
+                    xPointsRange[p, :] = xrange_meps
             else:
                 typeRange[p] = 0  # range is CONVEX
-                xrange, a, b, c = findXRange(coef[p, :], eps)
-                xPointsRange[p, :] = xrange
-                if np.isnan(xrange[0]):
+                xrange_eps, a, b, c = findXRange(coef[p, :], eps)
+                if np.isnan(xrange_eps[0]):
+                    xrange_eps = 1e-5 * np.ones(2)
                     typeRange[p] = 2
+                xrange_meps, a, b, c = findXRange(coef[p, :], -eps)
+                if np.isnan(xrange_meps[0]):
+                    xrange_meps = 1e-5 * np.ones(2)
+                    typeRange[p] = 2
+                if xrange_eps[1] > xrange_meps[1]:
+                    xPointsRange[p, :] = xrange_meps
+                else:
+                    xPointsRange[p, :] = xrange_eps
     # Delete concave polynomials with no real roots
     xPointsRange = np.delete(xPointsRange, delPol, 0)
     xPointsRange = xPointsRange[0:Npoly, :]
     coef = np.delete(coef, delPol, 0)
     coef = coef[0:Npoly, :]
+    typeRange = np.delete(typeRange, delPol)
+    typeRange = typeRange[0:Npoly]
     return xPointsRange, typeRange, coef
 
 
 def generateXpoints(xrange, typeRange, Np, sq_size):
     (Npoly, d) = xrange.shape
-    Np = Np * 5  # Create extra points to avoid NaN s
+    Np = Np * 10   # Create extra points to avoid NaN s
     xp = np.zeros((Npoly, Np))
     for p in range(Npoly):
         if typeRange[p] == 0:  # CONVEX and roots are real
             xp1 = np.random.uniform(-sq_size, xrange[p,0], int(Np/2))
             xp2 = np.random.uniform(xrange[p,1], sq_size, int(Np/2))
-            xp[p, :] = np.hstack((xp1[:int(Np/2)], xp2[:int(Np/2)]))
+            xp_stack = np.hstack((xp1[:int(Np/2)], xp2[:int(Np/2)]))
+            np.random.shuffle(xp_stack)
+            xp[p,:] = xp_stack
         elif typeRange[p] == 1:  # CONCAVE and roots are real
             xp[p, :] = np.random.uniform(xrange[p, 0], xrange[p, 1], Np)
         elif typeRange[p] == 2:  # CONVEX but roots are not real
@@ -237,9 +280,12 @@ def generateYp(xp, coef, Np, eps, GT, sol_num):
             # Delete points with NaN
             idx_nan = np.where(np.isnan(yp))
             yp = np.delete(yp, idx_nan)
-            yp_out[p,:] = yp[0:Np]
-            xp_poly = np.delete(xp[p,:], idx_nan, 0 )
-            xp_out[p,:] = xp_poly[0:Np]
+            xp_poly = np.delete(xp[p, :], idx_nan, 0)
+            try:
+                yp_out[p,:] = yp[0:Np]
+                xp_out[p, :] = xp_poly[0:Np]
+            except ValueError:
+                print('Polynomial', p, 'Dismissed')
         labels[p, :] = p * np.ones((1, Np))
     return xp_out, yp_out, labels
 
@@ -271,7 +317,8 @@ def plotData(coef, labels, xp, yp, sq_size, eps, Np, Npoly, tit):
             plt.plot(xp_GT[p, :], yp_GT_2[p, :], c=cul[p], linestyle=lstyle[i])
             plt.scatter(xp[idx[0]], yp[idx[0]], color=cul[p], edgecolors='k')
     plt.title(tit)
-    textstr = 'Npoly: ' + np.str(Npoly) + '\nNpoints: ' + np.str(Np) + ' (x' + np.str(Npoly) + ')'
+    textstr = 'Npoly: ' + np.str(Npoly) + '' \
+                                          '\nNpoints: ' + np.str(Np) + ' (x' + np.str(Npoly) + ')'
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     sq_size_y = 3 * sq_size
     plt.text(- sq_size + 0.5, sq_size_y - 3, textstr, fontsize=10,

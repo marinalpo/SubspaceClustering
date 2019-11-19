@@ -1,10 +1,11 @@
 # Experiments2_full.m -----------------------------------------------------------------
 # Exp 1: Fix Ns and D, run for different Np and record the running time and convergence
+
 import numpy as np
 import matplotlib.pyplot as plt
 from tempfile import TemporaryFile
 from utils import *
-from SSC_CVXPY_Full import *
+from methods import *
 
 np.random.seed(2020)
 
