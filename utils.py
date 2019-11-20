@@ -13,7 +13,12 @@ class RwHoptCond:
 
 
 def sortEigens(val, vec):
-    # Sort Eigenvalues in a descending order and sort its corresponding Eigenvectors
+    """ Sort Eigenvalues in a descending order and sort its corresponding Eigenvectors
+    :param val: Unsorted eigenvalues
+    :param vec: Unsorted eigenvectors
+    :return: sortedval: Sorted eigenvalues
+    :return: sortedvec: Sorted eigenvectors
+    """
     idx = val.argsort()[::-1]
     sortedval = val[idx]
     sortedvec = vec[:, idx]
@@ -21,7 +26,13 @@ def sortEigens(val, vec):
 
 
 def plotNormalsAndPoints(normals, Xp, ss_ind, t, last):
-    # WARNING: Only for D = 2 and up to 7 Ns
+    """ WARNING: Only for D = 2 and up to 7 Ns
+    :param normals: DxNs matrix with normal vectors
+    :param Xp: DxN matrix with the N points
+    :param ss_ind: N array with indeces of the subspace each point belongs to
+    :param t: String with title
+    :param last: Boolean indicating if it is the last plot to show
+    """
     c = ['r', 'b', 'g', 'm', 'c', 'k', 'y']
     [a, Ns] = normals.shape
     for i in range(Ns):
@@ -38,10 +49,11 @@ def plotNormalsAndPoints(normals, Xp, ss_ind, t, last):
 
 
 def createNormalVectors(D, Ns):
-    # Generates a matrix of Normal Vectors from a random distribution
-    # Inputs: - D: dimension
-    #         - Ns: number of Subspaces
-    # Outputs: - Normals: DxNs matrix with normal vectors
+    """ Generates a matrix of Normal Vectors from a random distribution
+    :param D: dimension
+    :param Ns: number of Subspaces
+    :return: normals: DxNs matrix with normal vectors
+    """
     normals = np.random.randn(D, Ns)
     normals = (np.matmul(normals, np.diag(np.sign(normals[0, :])))) / (
         np.sqrt(np.diag(np.matmul(np.transpose(normals), normals))))
@@ -51,13 +63,15 @@ def createNormalVectors(D, Ns):
 
 
 def generatePoints(normals, num_points, noise_b, sq_side):
-    # Generates points from a set of subspaces, by sampling from a square of D-1 dimensions and rotating about the normal.
-    # Inputs: - Normals: DxS matrix with the S normals in D dimensions
-    #         - num_points: Sx1 vector with the number of points to be sampled in each subspace
-    #         - noise_b: noise bound
-    #         - sq_side: size of the square from which we sample
-    # Outputs: - X: DxN matrix with the N points
-    #          - ss_ind: index of the subspace
+    """ Generates points from a set of subspaces, by sampling from a square
+        of D-1 dimensions and rotating about the normal.
+    :param normals: DxS matrix with the S normals in D dimensions
+    :param num_points: Sx1 vector with the number of points to be sampled in each subspace
+    :param noise_b: noise bound
+    :param sq_side: size of the square from which we sample
+    :return: X: DxN matrix with the N points
+    :return: ss_ind: N array with indeces of the subspace each point belongs to
+    """
     N = np.sum(num_points)
     [D, S] = normals.shape
     X = np.zeros([D, N])
@@ -77,13 +91,13 @@ def generatePoints(normals, num_points, noise_b, sq_side):
 
 
 def exponent_nk(n, K):
-    #
-    # Inputs: - n: Degree of the Veronese map
-    #         - K: Sx1 vector with the number of points to be sampled in each subspace
-    # Outputs: - exp: DxN matrix with the N points
+    """ Computes exponents of the veronese map of degree n
+    :param n: Degree of the Veronese map
+    :param K: Sx1 vector with the number of points to be sampled in each subspace
+    :return: exp: DxN matrix with the N points
+    """
     id = np.diag(np.ones(K))
     exp = id
-
     for i in range(1, n):
         rene = np.asarray([])
         for j in range(0, K):
@@ -98,27 +112,22 @@ def exponent_nk(n, K):
 
 
 def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
-    '''
-     Computes the Veronese map of degree n, that is all
-     the monomials of a certain degree.
-     x is a K by N matrix, where K is dimension and N number of points
-     y is a K by Mn matrix, where Mn = nchoosek(n+K-1,n)
-     powes is a K by Mn matrix with the exponent of each monomial
-
-     Example veronese([x1;x2],2) gives
-     y = [x1^2;x1*x2;x2^2]
-     powers = [2 0; 1 1; 0 2]
-
+    """ Computes the Veronese map of degree n, (all the monomials of a certain degree)
+     Example: veronese([x1;x2],2) gives y = [x1^2;x1*x2;x2^2] and powers = [2 0; 1 1; 0 2]
      Copyright @ Rene Vidal, 2003
-    '''
-
+    :param x: K by N matrix, where K is dimension and N number of points
+    :param n: degree of the veronese map
+    :param if_cuda: boolean
+    :param if_coffiecnt: boolean
+    :return: y: K by Mn matrix, where Mn = nchoosek(n+K-1,n)
+    :return: powers: K by Mn matrix with the exponent of each monomial
+    """
     if if_coffiecnt:
         assert n == 2
     K, N = x.shape[0], x.shape[1]
     powers = exponent_nk(n, K)
     if if_cuda:
         powers = torch.tensor(powers, dtype=torch.float)
-
     else:
         powers = torch.tensor(powers, dtype=torch.float)
     if n == 0:
@@ -126,16 +135,8 @@ def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
     elif n == 1:
         y = x
     else:
-        # x[x <= 1e-10] = 1e-10
-        # y = np.real(np.exp(np.matmul(powers, np.log(x))))
         s = []
         for i in range(0, powers.shape[0]):
-            # if powers[i, :].sum() == 0:
-            #     s.append(torch.ones([1, x.shape[1]]))
-            # else:
-            #     tmp = x.t().pow(powers[i, :])
-            #     ind = torch.ge(powers[i, :].expand_as(tmp), 1).float()
-            #     s.append(torch.mul(tmp, ind).sum(dim=1).unsqueeze(dim=0))
             tmp = x.t().pow(powers[i, :])
             ttmp = tmp[:, 0]
             for j in range(1, tmp.shape[1]):
@@ -150,28 +151,32 @@ def veronese_nk(x, n, if_cuda=False, if_coffiecnt=False):
 
 def generate_veronese(x, n):
     """Concatenates the results of veronese_nk function to generate the complete veronese map of x
-        @param x: Matrix (dim, npoints)
-        @param n: the veronese map will be up to degree n
-
-        Output: the complete veronese map of x (veronese_dim, BS)
-        Example:
-        if x is a two dimensional vector x = [x1 x2]
+    Example: If x is a two dimensional vector x = [x1 x2]
         generate_veronese(x, 2) ==> [1 x1 x2 x1^2 x1*x2 x2^2]
         generate_veronese(x, 3) ==> [1 x1 x2 x1^2 x1*x2 x2^2 x1^3 x1^2*x2 x1*x2^2 x2^3]
+    :param x: (dim)x(npoints) matrix
+    :param n: degree of the veronesse map
+    :return: v_x: the complete veronese map of x (veronese_dim, BS)
+    :return: p_y: exponentials of the veronese map
     """
     v_x = x
-
     p_x = None
     for i in range(0, n - 1):
         v_x_n, p_n = veronese_nk(x, i + 2, if_cuda=False, if_coffiecnt=False, )
-
         v_x = torch.cat([v_x, v_x_n], dim=0)
-
     v_x = torch.cat([torch.ones(1, v_x.size()[1]).float(), v_x.float()])
     return v_x, p_x
 
 
 def findXRange(coef, eps):
+    """ Finds X range that corresponds to polynomial at level set = eps
+    :param coef: 1x6 matrix containing coefficients of the polynomial
+    :param eps: Level set
+    :return: xrange: 1x2 array containing range's beginning and ending
+    :return: a: Quadratic coefficient
+    :return: b: Linear coefficient
+    :return: c: Independent coefficient
+    """
     xrange = np.zeros(2)
     a = np.power(coef[4], 2) - 4 * coef[5] * coef[3] + 0.000001
     b = 2 * coef[2] * coef[4] - 4 * coef[5] * coef[1]
@@ -185,6 +190,14 @@ def findXRange(coef, eps):
 
 
 def findXPointsRange(coef, eps, Npoly):
+    """ Finds X range from where to sample random points and classifies polynomials in 4 groups
+    :param coef: (Npoly_ext)x(D) Matrix with coefficients from polynomials
+    :param eps: Level set (noise bound)
+    :param Npoly: Number of polynomials to be considered
+    :return: xPointsRange:  X range from where to to sample random points
+    :return: typeRange: Type of range value
+    :return: coef: (Npoly)x(D) Matrix with coefficients from considered polynomials
+    """
     delPol = []
     (Npoly_ext, d) = coef.shape
     xPointsRange = np.zeros((Npoly_ext, 2))
@@ -237,6 +250,13 @@ def findXPointsRange(coef, eps, Npoly):
 
 
 def generateXpoints(xrange, typeRange, Np, sq_size):
+    """ Generates random x points considering the polynomial range type
+    :param xrange: X range from where to to sample random points
+    :param typeRange: Type of range value
+    :param Np: Desired number of random points
+    :param sq_size: Sampling window size
+    :return: xp: (Npoly)x(Np) Random x points sampled in the range of each polynomial
+    """
     (Npoly, d) = xrange.shape
     Np = Np * 10   # Create extra points to avoid NaN s
     xp = np.zeros((Npoly, Np))
@@ -255,6 +275,17 @@ def generateXpoints(xrange, typeRange, Np, sq_size):
 
 
 def generateYp(xp, coef, Np, eps, GT, sol_num):
+    """ Finds the y values of the sampled x points at a random level set
+    :param xp: (Npoly)x(Np_extra) matrix containing sampled points
+    :param coef: (Npoly)x(D) Matrix with coefficients from considered polynomials
+    :param Np: Number of points
+    :param eps: Level set (noise bound)
+    :param GT: Boolean. Ground Truth
+    :param sol_num: scalar indicating if the upper(0) or lower(1) solution is desired
+    :return: xp_out: (Npoly)x(Np) Matrix with the x points for each polynomial
+    :return: yp_out: (Npoly)x(Np) Matrix with the y points for each polynomial
+    :return: labels: (Npoly)x(Np) Matrix with the labels of each points for each polynomial
+    """
     (Npoly, Np_extra) = xp.shape
     xp_out = np.zeros((Npoly, Np))
     yp_out = np.zeros((Npoly, Np))
@@ -291,6 +322,12 @@ def generateYp(xp, coef, Np, eps, GT, sol_num):
 
 
 def plotInput(points, sq_size, Np, Npoly):
+    """ Plots data information that is inputted to the algorithm
+    :param points: 2x(NpxNpoly) matrix with the points inputted to the algorithm
+    :param sq_size: Size of the sampling window
+    :param Np: Number of points for each polynomial
+    :param Npoly: Number of polynomials
+    """
     plt.scatter(points[0,:], points[1,:], color = 'k')
     plt.title('Input to Algorithm\nVeronesse (deg=2) of the points')
     textstr = 'Npoly: ' + np.str(Npoly) + '\nNpoints: ' + np.str(Np) + ' (x'+ np.str(Npoly)+ ')'
@@ -303,6 +340,18 @@ def plotInput(points, sq_size, Np, Npoly):
 
 
 def plotData(coef, labels, xp, yp, sq_size, eps, Np, Npoly, tit):
+    """ For each polynomial, the level set evaluation at 0, eps and -eps is plotted along with its
+        randomly sampled points.
+    :param coef: (Npoly)x6 Matrix with the coefficients for each polynomial
+    :param labels: NpolyxNp Array with the labels of each point
+    :param xp: NpolyxNp Array with the x values of each point
+    :param yp: NpolyxNp Array with the y values of each point
+    :param sq_size: Sampling window size
+    :param eps: Noise bound
+    :param Np: Number of points per polynomial
+    :param Npoly: Number of polynomials
+    :param tit: String containing Title
+    """
     Np_GT = int(1e5)  # Number of points per polynomial to plot GT
     noise = [0, eps, -eps]
     lstyle = ['-', ':', ':']

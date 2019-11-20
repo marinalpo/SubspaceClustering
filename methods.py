@@ -4,21 +4,20 @@ from time import time
 from utils import *
 
 
-def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
-    # Subspace Clustering using CVXPY, Naive implementation
-    # Inputs: - Xp: DxNp matrix, each column is a point
-    #         - eps: allowed distance from the subspace
-    #         - Ns: number of subspaces
-    #         - RwHopt: conditions for reweighted heuristic contained on an object that includes:
+def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt):
+    """ Subspace Clustering using CVXPY, Naive implementation
+    :param Xp: DxNp matrix, each column is a point
+    :param eps: Noise bound: allowed distance from the subspace
+    :param Ns: Number of subspaces
+    :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
     #                   - maxIter: number of max iterations
     #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
     #                   - corner: rank-1 on corner (1) or on full matrix (0)
-    #         - delta: noise factor on the identity at first iteration
-    # Outputs: - R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
-    #          - S: NsxNp matrix, with labels for each point and subspace
-    #          - runtime: runtime of the algorithm (excluding solution extraction)
-    #          - rankness: rankness of every iteration
-
+    :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
+    :return: S: NsxNp matrix, with labels for each point and subspace
+    :return: runtime: runtime of the algorithm (excluding solution extraction)
+    :return: rankness: rankness of every iteration
+    """
     # Define dimension and number of points
     [D, Np] = Xp.shape
     Nm = 1 + Ns * (Np + D)  # Size of the overall matrix
@@ -54,7 +53,7 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
     # Solve the problem with Reweighted Heuristics
     rank1ness = np.zeros([RwHopt.maxIter, 1])
     for iter in range(RwHopt.maxIter):
-        # print('   - R.H. iteration: ', iter)
+        print('   - R.H. iteration: ', iter)
         if RwHopt.corner:  # Rank1 on corner
             M = X[1:Nc, 1:Nc]
             obj = cp.Minimize(cp.trace(W.T * M))
@@ -88,21 +87,22 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt, delta):
 
 
 
+
 def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
-    # Subspace Clustering using CVXPY, Naive implementation
-    # Inputs: - Xp: DxNp matrix, each column is a point
-    #         - eps: allowed distance from the subspace
-    #         - Ns: number of subspaces
-    #         - RwHopt: conditions for reweighted heuristic contained on an object that includes:
+    """ Subspace Clustering using Cheng Implementation
+    :param Xp: DxNp matrix, each column is a point
+    :param eps: Noise bound: allowed distance from the subspace
+    :param Ns: Number of subspaces
+    :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
     #                   - maxIter: number of max iterations
     #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
     #                   - corner: rank-1 on corner (1) or on full matrix (0)
-    #         - delta: noise factor on the identity at first iteration
-    # Outputs: - R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
-    #          - S: NsxNp matrix, with labels for each point and subspace
-    #          - runtime: runtime of the algorithm (excluding solution extraction)
-    #          - rankness: rankness of every iteration
-
+    :param: delta: Noise factor on the identity at first iteration
+    :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
+    :return: S: NsxNp matrix, with labels for each point and subspace
+    :return: runtime: runtime of the algorithm (excluding solution extraction)
+    :return: rankness: rankness of every iteration
+    """
     # Define dimension and number of points
     [D, Np] = Xp.shape
     Nm = 1 + Ns * (Np + D)  # Size of the overall matrix
@@ -135,12 +135,10 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
 
     W = np.eye(1 + Ns * D) + delta * np.random.randn(1 + Ns * D, 1 + Ns * D)
     rank1ness = np.zeros(RwHopt.maxIter)
-    bestR = R
-    bestM = M
 
     tic = time()
     for iter in range(0, RwHopt.maxIter):
-        # print('   - R.H. iteration: ', iter)
+        print('   - R.H. iteration: ', iter)
         objective = cp.Minimize(cp.trace(W.T * R))
         prob = cp.Problem(objective, C)
         sol = prob.solve(solver=cp.MOSEK)
@@ -168,22 +166,22 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
     return R, S, runtime, rank1ness
 
 
+
 def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
-    # Subspace Clustering using CVXPY, Naive implementation
-    # Inputs: - Xp: DxNp matrix, each column is a point
-    #         - eps: allowed distance from the subspace
-    #         - Ns: number of subspaces
-    #         - RwHopt: conditions for reweighted heuristic contained on an object that includes:
+    """ Subspace Clustering using CDC_New Implementation
+    :param Xp: DxNp matrix, each column is a point
+    :param eps: Noise bound: allowed distance from the subspace
+    :param Ns: Number of subspaces
+    :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
     #                   - maxIter: number of max iterations
     #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
     #                   - corner: rank-1 on corner (1) or on full matrix (0)
-    #         - delta: noise factor on the identity at first iteration
-    # Outputs: - R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
-    #          - S: NsxNp matrix, with labels for each point and subspace
-    #          - runtime: runtime of the algorithm (excluding solution extraction)
-    #          - rankness: rankness of every iteration
-    # Define dimension and number of points
-
+    :param: delta: Noise factor on the identity at first iteration
+    :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
+    :return: S: NsxNp matrix, with labels for each point and subspace
+    :return: runtime: runtime of the algorithm (excluding solution extraction)
+    :return: rankness: rankness of every iteration
+    """
     # Define dimension and number of points
     [D, Np] = Xp.shape
 
@@ -223,7 +221,7 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
     tic = time()
     rank1ness = np.zeros((RwHopt.maxIter, Ns))
     for iter in range(0, RwHopt.maxIter):
-        # print('   - R.H. iteration: ', iter)
+        print('   - R.H. iteration: ', iter)
         objective = cp.Minimize(cp.sum(t))
         constraints = C + Citer
         prob = cp.Problem(objective, constraints)
@@ -243,6 +241,7 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
 
     # Extract Variables
     rank1ness = rank1ness[0:iter,:]
+    rank1ness = np.mean(rank1ness)
     S = S.value
     Rout = np.zeros((Ns, D))
     for i in range(0, Ns):
