@@ -10,9 +10,9 @@ def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt):
     :param eps: Noise bound: allowed distance from the subspace
     :param Ns: Number of subspaces
     :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
-    #                   - maxIter: number of max iterations
-    #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
-    #                   - corner: rank-1 on corner (1) or on full matrix (0)
+                   - maxIter: number of max iterations
+                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
+                   - corner: rank-1 on corner (1) or on full matrix (0)
     :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
     :return: S: NsxNp matrix, with labels for each point and subspace
     :return: runtime: runtime of the algorithm (excluding solution extraction)
@@ -94,9 +94,9 @@ def SSC_CVXPY_Cheng(Xp, eps, Ns, RwHopt, delta):
     :param eps: Noise bound: allowed distance from the subspace
     :param Ns: Number of subspaces
     :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
-    #                   - maxIter: number of max iterations
-    #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
-    #                   - corner: rank-1 on corner (1) or on full matrix (0)
+                   - maxIter: number of max iterations
+                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
+                   - corner: rank-1 on corner (1) or on full matrix (0)
     :param: delta: Noise factor on the identity at first iteration
     :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
     :return: S: NsxNp matrix, with labels for each point and subspace
@@ -173,9 +173,9 @@ def SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta):
     :param eps: Noise bound: allowed distance from the subspace
     :param Ns: Number of subspaces
     :param RwHopt: conditions for reweighted heuristic contained on an object that includes:
-    #                   - maxIter: number of max iterations
-    #                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
-    #                   - corner: rank-1 on corner (1) or on full matrix (0)
+                   - maxIter: number of max iterations
+                   - eigThres: threshold on the eigenvalue fraction for stopping procedure
+                   - corner: rank-1 on corner (1) or on full matrix (0)
     :param: delta: Noise factor on the identity at first iteration
     :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
     :return: S: NsxNp matrix, with labels for each point and subspace
