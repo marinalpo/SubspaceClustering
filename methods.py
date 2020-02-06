@@ -1,7 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from time import time
-from utils import *
+from utils_reduced import *
 
 
 def SSC_CVXPY_Full(Xp, eps, Ns, RwHopt):

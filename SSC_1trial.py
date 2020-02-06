@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tempfile import TemporaryFile
-from utils import *
+#from utils import *
+from utils_reduced import *
 from methods import *
 from os.path import dirname, join as pjoin
 import scipy.io as sio
@@ -51,20 +52,20 @@ if method == 1:
 if method == 2:
     R, S, runtime, rank1ness = SSC_CVXPY_cdc_new(Xp, eps, Ns, RwHopt, delta)
 
-# Print and Plot Results
-ss_ind_pred = np.transpose(S.argmax(axis=0))
-normals_pred = R[0,:]
-for i in range(1,Ns):
-    R_stack = R[i,:]
-    normals_pred = np.vstack((normals_pred, R_stack))
-normals_pred = np.transpose(normals_pred)
-
-print('RESULTS\nS (first 5 columns):')
-print(np.around(S[:,0:5], decimals=2))
-print('Rank1ness of each iteration:', np.around(np.transpose(rank1ness), decimals=3))
-print('Elapsed time [s]:', np.around(runtime, decimals=2))
-
-plt.figure(1)
-plotNormalsAndPoints(normals,Xp,ss_ind,'Ground Truth',0)
-plt.figure(2)
-plotNormalsAndPoints(normals_pred,Xp,ss_ind_pred,'Predicted using ' + method_name[method], 1)
+## Print and Plot Results
+#ss_ind_pred = np.transpose(S.argmax(axis=0))
+#normals_pred = R[0,:]
+#for i in range(1,Ns):
+#    R_stack = R[i,:]
+#    normals_pred = np.vstack((normals_pred, R_stack))
+#normals_pred = np.transpose(normals_pred)
+#
+#print('RESULTS\nS (first 5 columns):')
+#print(np.around(S[:,0:5], decimals=2))
+#print('Rank1ness of each iteration:', np.around(np.transpose(rank1ness), decimals=3))
+#print('Elapsed time [s]:', np.around(runtime, decimals=2))
+#
+#plt.figure(1)
+#plotNormalsAndPoints(normals,Xp,ss_ind,'Ground Truth',0)
+#plt.figure(2)
+#plotNormalsAndPoints(normals_pred,Xp,ss_ind_pred,'Predicted using ' + method_name[method], 1)
