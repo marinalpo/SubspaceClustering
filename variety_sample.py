@@ -8,7 +8,7 @@ Created on Thu Feb  6 11:17:44 2020
 import numpy as np
 import sympy as sp
 import matplotlib.pyplot as plt
-from utils import varietySample
+from utils_reduced import varietySample
 
 N = 2                       #Number of variables
 x = sp.symarray("x", N)     #Variables in variety
@@ -21,7 +21,7 @@ eps_bound = 1              #Noise level
 #equation 2.1
 #V = x[0]**4 + x[1]**4 - 3* x[0]**2 - x[0] * x[1]**2 - x[1] + 1;
 #R2 = 8;
-#count_max =400
+count_max =400
 #elliptic curve
 #noncompact
 V = x[1]**2 - x[0]**3 + 3 * x[0]*2 - 1;
