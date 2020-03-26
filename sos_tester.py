@@ -25,21 +25,30 @@ x = sp.symarray("x", 3)
 
 #p = 1 + x[0]**4 * x[1]**2 + x[0]**2 * x[1]**4
 
-p = -4*x[0]**3 * x[1]**4 + 2*x[0]**4 * x[1]**3 + 5*x[0]**6 * x[1]**8 - 2*x[1]**7 * x[0]**7 + 2 * x[0]**8 * x[1]**6
-P = sp.Poly(p)
+#p = -4*x[0]**3 * x[1]**4 + 2*x[0]**4 * x[1]**3 + 5*x[0]**6 * x[1]**8 - 2*x[1]**7 * x[0]**7 + 2 * x[0]**8 * x[1]**6
+#P = sp.Poly(p)
 
-#th = sp.symarray('th',3)
-#y = sp.symarray('y',2)
-#p = (y[0]-th[0])**2 + (y[1]-th[1])**2 - th[2]
+th = sp.symarray('th',4)
+p = (x[0]-th[0])**2 + (x[1]-th[1])**2  + (x[2] - th[2])**2- th[3]**2
 #
-#P = sp.Poly(p, *th)
+P = sp.Poly(p, *th)
+
 
 b = np.array(P.coeffs());
 A_pre = np.array(P.monoms());
 
+#generate the coefficients given test data
+fb = sp.lambdify(x, b, "numpy")
+#Xt = np.random.randn(8, 3)
+
+#bt = np.array([fb(*x) for x in Xt])
+b = np.array(fb(*[-1, 1, 2]))
+
 
 #add in constant term?
-if [0,0] not in A_pre:
+z_blank = np.zeros([1, A_pre.shape[1]])
+z_list = z_blank.tolist()[0]
+if z_blank not in A_pre:
     A_pre= np.append(A_pre, np.zeros([1, A_pre.shape[1]]), axis = 0)
     print(A_pre)
     b = np.append(b, 0)
@@ -56,8 +65,9 @@ A[1:,:] = A_pre.T
    
 support = np.array(polytope.interior(A, strict = False))
 half_support = [tuple(v // 2) for v in support if v.any() and not (v % 2).any()]
-if [0,0] not in half_support:
-    half_support = [(0,0)] + half_support
+#once again, add back the constant
+if z_list not in half_support:
+    half_support = [tuple(z_list)] + half_support
 
 #moment variables and matrix
 y = cvx.Variable(len(support))
