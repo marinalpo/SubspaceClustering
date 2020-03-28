@@ -112,7 +112,6 @@ for v,c in coeffs.items():
         
     objective += c* C[lc]
     #constraints.append(cvx.Zero(cvx.sum([C[i,j] for i,j in l]) - cvx.expressions.constants.Constant(c)))
-    p += 1
 #define the problem
 
 #objective = y @ coeff_ref
