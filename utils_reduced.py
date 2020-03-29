@@ -191,12 +191,15 @@ def ACmomentConstraint(p, var):
     z_blank = np.zeros([1, A_pre.shape[1]])
     z_list = [int(z) for z in z_blank.tolist()[0]] #probably a better way to do this
     add_z = []
-    monom = A_pre.tolist()
+    
     if z_blank not in A_pre:
         A_pre= np.append(A_pre, z_blank, axis = 0)
         #print(A_pre)
         b = np.append(b, 0)
         add_z = z_list
+    
+    #always add the constant term to the monomial set
+    monom = A_pre.tolist()
     A = np.ones((A_pre.shape[1] + 1, A_pre.shape[0]), dtype = int)
     A[1:,:] = A_pre.T
 
