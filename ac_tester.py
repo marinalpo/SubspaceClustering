@@ -16,11 +16,12 @@ Created on Fri Mar 27 12:40:55 2020
 import numpy as np
 import sympy as sp
 import cvxpy as cvx
-from utils_reduced import varietySample
+from utils_reduced import varietySample, RwHoptCond
 import matplotlib.pyplot as plt
 from methods_ac import AC_CVXPY
 
-np.random.seed(423)
+np.random.seed(42)
+RwHopt = RwHoptCond(15, 0.97, 1) 
 
 Nx = 2
 Nth = 2
@@ -32,11 +33,11 @@ th = sp.symarray('th',Nth)
 
 
 eps_true = 0              #Noise level
-eps_test = 0.1
+eps_test = 0.05
 #circle
 R2 = 1;
 V = x[0]**2 + x[1]**2 - R2;
-count_max = 10
+count_max = 20
 
 X1 = varietySample(V, x, count_max, R2, 0)
 X2 = varietySample(V, x, count_max, R2, 0)
@@ -53,7 +54,7 @@ p = [(x[0]-th[0])**2 + (x[1]-th[1])**2 - 1]
 
 mult = [2]
 delta = 1e-4
-sout = AC_CVXPY(X, eps_test, [x,th], p, mult)
+sout = AC_CVXPY(X, eps_test, [x,th], p, mult, RwHopt)
 
 M0 = sout["M"][0]
 M1 = sout["M"][1]
