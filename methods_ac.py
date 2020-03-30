@@ -72,8 +72,39 @@ class AC_manager:
         self.mult   += [mult]
                 
 
-    def generate_SDP(self, Xp):
-        print("{0}+{1}j".format(self.real,self.imag))
+    def moment_SDP(self):
+        #roughly equivalent to AC_CVXPY, generate the SDP to classify data in Xp
+        #or maybe generate model without data Xp, and then insert classification constraints. That sounds better.
+
+        """
+        Constraints in problem
+
+        con_one:        [0,0...0] entry of moment matrix is 1
+        con_mom:        Parameter (theta) entries obey moment structure
+        con_geom:       Models obey geometric constraints g(theta) >= 0, h(theta) == 0
+        con_bin:        binary classification: s^2 = s
+        con_assign:     all datapoints are assigned to one and only one model class
+
+        con_classify:   Models classify in-class data within epsilon
+
+        C = con_one + con_assign + con_mom + con_bin + con_classify + con_geom
+
+        """
+
+        Mom_con = [ACmomentConstraint(p, var) for p in P]
+        pass
+
+    def classify_SDP(self, Xp, eps):
+        pass
+
+    def generate_SDP(self, Xp, eps):
+        pass
+
+    def solve_SDP(self, RwHopt):
+        #solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
+        # Anything that sticks
+
+        pass
         
 
 def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
@@ -88,10 +119,12 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
                    - eigThres: threshold on the eigenvalue fraction for stopping procedure
                    - corner: rank-1 on corner (1) or on full matrix (0)
     :param: delta: Noise factor on the identity at first iteration
+
+    Need to revise the return section of documentation
     :return: R: tensor of length Ns, where each item is a (1+D)x(1+D) matrix with the subspace coordinates
     :return: S: NsxNp matrix, with labels for each point and subspace
     :return: runtime: runtime of the algorithm (excluding solution extraction)
-    :return: rankness: rankness of every iteration
+    :return: rank1ness: rankness of every iteration
     """
     
     
@@ -111,7 +144,7 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
     Nclass = sum(mult)
 
     #number of monomials    
-    Nm = [len(m["monom"]) for m in Mom_con]
+    Nm = [len(m["monom_all"]) for m in Mom_con]
     Ns = [len(m["supp"])  for m in Mom_con]
     
     #Nm = 1 + Ns * (Np + D)  # Size of the overall matrix
@@ -150,7 +183,7 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
             Mth.append(m[:Ns[ic], :Ns[ic]])
             
             #"corner" of moment matrix is 1
-            ind_1 = len(mom["monom"])-1
+            ind_1 = len(mom["monom_all"])-1
             con_one.append(M[count][ind_1, ind_1] == 1)
             #r_curr = M[count][ind_1, :Nm[ic]]
             #R[count] = r_curr    
@@ -171,7 +204,7 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
             for ip in range(Np):                
                 i = ip + Ns[ic]
                 
-                coeff_curr = mom["fb"](*Xp[:, ip])
+                coeff_curr = mom["fb"][0](*Xp[:, ip])
                 
                 #f_curr = 0
                 rs_curr = M[count][i, :Nm[ic]]

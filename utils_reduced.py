@@ -181,7 +181,7 @@ def extract_monom(var, P0):
     
     # if "ineq" in cons.keys():
     #     g = [sp.Poly(gi, *th) for gi in cons["ineq"]]
-    return {"fb": fb, "monom": monom, "coeff": coeff, "A_pre": supp_monom}
+    return {"fb": fb, "monom_poly": monom, "coeff": coeff, "A_pre": supp_monom}
     
 
 def ACmomentConstraint(p, var):
@@ -215,15 +215,18 @@ def ACmomentConstraint(p, var):
 
 
     #Identify support set, prepare for polytope reduction
-    A_pre = np.array(P.monoms());
-    b = np.array(P.coeffs());
+    #A_pre = np.array(P.monoms())
+    #b = np.array(P.coeffs())
     
     # #function to generate parameter coefficients
     # if len(var) == 1:
     #     fb = lambda p: p
     # else:
     #     fb = sp.lambdify(x, b, "numpy")
-    fout =  extract_monom(var,[p])
+    if type(p) == list:
+        fout = extract_monom(var, p)
+    else:
+        fout = extract_monom(var,[p])
     fb = fout["fb"]
     A_pre = fout["A_pre"]
     monom_poly = fout["monom_poly"]
