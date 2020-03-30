@@ -141,6 +141,49 @@ def varietySample(V, x, count_max, R2, eps_bound):
         
     return P
 
+def extract_monom(var, P0):
+    """
+    Extract a supporting set of monomials for the semialgebraic set P
+    
+    Also form a function fb that can take in data X and return coefficients
+    
+    Parameters
+    ----------
+    var: list of sympy variables
+        [x; th] = [data; parameters]
+    P0:  list of sympy polynomials
+        Polynomials defining semialgebraic set. Doesn't yet matter if they are
+        the function, equalities or inequalities, need still to be supported 
+    
+    """
+    
+    x = var[0]
+    th = var[1]
+    
+    P = [sp.Poly(p, *th) for p in P0]
+    
+    monom = [list(p.monoms()) for p in P]
+    coeff = [np.array(p.coeffs()) for p in P]
+  
+    #supp_monom = np.unique(np.array(monom), axis=1)
+    
+    
+    #I know this is ugly
+    #find unique monomial terms in function/constraints
+    #then output them in sorted lexicographical order
+    
+    supp_monom = np.flip(np.unique(np.array(sum(monom, [])), axis = 0), axis = 0)
+   
+    fb = [sp.lambdify(x, bi, "numpy") for bi in coeff]
+    
+    # if "eq" in cons.keys():
+    #     h = [sp.Poly(gi, *th) for gi in cons["eq"]]
+    
+    # if "ineq" in cons.keys():
+    #     g = [sp.Poly(gi, *th) for gi in cons["ineq"]]
+    return {"fb": fb, "monom": monom, "coeff": coeff, "A_pre": supp_monom}
+    
+
 def ACmomentConstraint(p, var):
     """
     Given a polynomial P in variables (var[0]; var[1]) (like f(x; theta))
@@ -164,14 +207,10 @@ def ACmomentConstraint(p, var):
 
     """
     
-    #extract the polynomial and variables
-    if len(var) == 1:
-        P = sp.Poly(p)
-        x = var[0]
-    else:        
-        x = var[0]
-        th = var[1]
-        P = sp.Poly(p, *th)
+    #extract the polynomial and variables    
+    x = var[0]
+    th = var[1]
+    # P = sp.Poly(p, *th)
     
 
 
@@ -179,14 +218,17 @@ def ACmomentConstraint(p, var):
     A_pre = np.array(P.monoms());
     b = np.array(P.coeffs());
     
-    #function to generate parameter coefficients
-    if len(var) == 1:
-        fb = lambda p: p
-    else:
-        fb = sp.lambdify(x, b, "numpy")
+    # #function to generate parameter coefficients
+    # if len(var) == 1:
+    #     fb = lambda p: p
+    # else:
+    #     fb = sp.lambdify(x, b, "numpy")
+    fout =  extract_monom(var,[p])
+    fb = fout["fb"]
+    A_pre = fout["A_pre"]
+    monom_poly = fout["monom_poly"]
     
-    
-     
+        
     #add in constant term?
     z_blank = np.zeros([1, A_pre.shape[1]])
     z_list = [int(z) for z in z_blank.tolist()[0]] #probably a better way to do this
@@ -194,33 +236,26 @@ def ACmomentConstraint(p, var):
     
     if z_blank not in A_pre:
         A_pre= np.append(A_pre, z_blank, axis = 0)
-        #print(A_pre)
         b = np.append(b, 0)
         add_z = z_list
     
     #always add the constant term to the monomial set
-    monom = A_pre.tolist()
+    monom_all = A_pre.tolist()
     A = np.ones((A_pre.shape[1] + 1, A_pre.shape[0]), dtype = int)
-    A[1:,:] = A_pre.T
-
-
-    #monomials are sorted in a lexicographical ordering    
-    #so the constant term [0, 0, ...] will go last
-    #monom = A_pre.tolist()[::-1]    
-    #monom = A_pre.tolist()
+    A[1:,:] = A_pre.T    
     
-    
+    #find the support and generators of all monomials    
     support = np.array(polytope.interior(A, strict = False))
     half_support = [list(v // 2) for v in support if v.any() and not (v % 2).any()]
     #once again, add back the constant
-    #if z_list not in half_support:
-    #    half_support = [z_list] + half_support
+
 
     #augmented support set, 1 + half_support + current support
-    #aug_support = half_support + [i for i in A_pre.tolist() if i not in half_support]
-    aug_support = monom + add_z + [i for i in half_support if i not in monom]
+    aug_support = monom_all + add_z + [i for i in half_support if i not in monom_all]
     
     
+    #lookup table to associate generating indices with monomials
+    #fill out the moment constraints
     lookup = {}   
     for vi in range(len(aug_support)):
        v = aug_support[vi]
@@ -231,7 +266,8 @@ def ACmomentConstraint(p, var):
                lookup[s] += [(ui, vi)]
            else:
                lookup[s] = [(ui, vi)]
-                   
-    M_out = {"supp" : aug_support, "half_supp" : half_support, "monom": monom, "cons" : lookup, "fb": fb}            
+     
+    M_out = {"supp" : aug_support, "monom_all": monom_all, "monom_poly": monom_poly, "cons" : lookup, "fb": fb}            
+    #M_out = {"supp" : aug_support, "half_supp" : half_support, "monom": monom, "cons" : lookup, "fb": fb}            
     
     return M_out

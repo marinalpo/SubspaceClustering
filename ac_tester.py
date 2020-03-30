@@ -16,12 +16,12 @@ Created on Fri Mar 27 12:40:55 2020
 import numpy as np
 import sympy as sp
 import cvxpy as cvx
-from utils_reduced import varietySample, RwHoptCond
+from utils_reduced import varietySample, RwHoptCond, extract_monom
 import matplotlib.pyplot as plt
-from methods_ac import AC_CVXPY
+from methods_ac import *
 
 np.random.seed(42)
-RwHopt = RwHoptCond(15, 0.97, 1) 
+RwHopt = RwHoptCond(1, 0.97, 1) 
 
 Nx = 2
 Nth = 2
@@ -32,7 +32,10 @@ th = sp.symarray('th',Nth)
 
 
 
-eps_true = 0              #Noise level
+#Pt = []
+
+
+eps_true = 0     #Noise level
 eps_test = 0.05
 #circle
 R2 = 1;
@@ -51,6 +54,11 @@ plt.scatter(X[0, :], X[1, :])
 
 
 p = [(x[0]-th[0])**2 + (x[1]-th[1])**2 - 1]
+
+
+pt = p + [th[0] - 1, 4-th[0], th[1]-1, 3-th[1]]
+
+lt = extract_monom([x,th], pt)
 
 mult = [2]
 delta = 1e-4

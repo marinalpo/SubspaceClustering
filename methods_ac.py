@@ -11,6 +11,71 @@ import sympy as sp
 from time import time
 from utils_reduced import *
 
+class AC_manager:
+    """ Algebaric Clustering for multi-class model validation    
+    
+    Classify data into a set of polynomial models under bounded noise
+    class contains all functionality needed to perform AC
+    Each class is a model of the form f(x; theta) = 0
+    Future: extend to semialgebraic clustering: f(x; theta) >= 0
+    
+    Parameters
+    ----------
+    x: sympy array
+        Data (space) sympy variables
+    th: sympy array
+        parameter sympy variables, want to solve
+    
+    P: list of models (each is a list of sympy polynomials)
+        Polynomial models f(x; theta) that generate data
+    mult: list of integers
+        multiplicity of each model in data (e.g. 5 lines and 2 circles w/ radius 1)            
+    n_eq: list of integers
+        number of equality constraints per model
+    n_ineq: list of integers
+        number of inequality constraints per model
+    """
+    
+    def __init__(self, x, th):
+        """Constructor for algebraic clustering"""
+        self.x = x;
+        self.th = th;
+
+
+        #models o
+        self.P = []
+        self.mult = []
+        self.n_eq = []
+        self.n_ineq = []
+        
+        self.mom_con = []
+        
+    def add_model(self, P, n_eq, n_ineq, mult):
+        """Add new polynomial model to system
+        
+        Parameters
+        ----------        
+        P: list of sympy polynomials
+            New polynomial models f(x; theta) that generate data
+            [f; hi(x) == 0; gj(x) >= 0]
+        n_ineq: integer
+            Number of equality constraints in list P
+        n_eq: integer
+            Number of inequality constraints in list P
+        mult: integer
+            multiplicity of each model in data (e.g. 5 lines and 2 circles w/ radius 1)      
+        
+        """        
+        self.P += [P]
+        self.n_eq   += [n_eq]
+        self.n_ineq += [n_ineq]
+        self.mult   += [mult]
+                
+
+    def generate_SDP(self, Xp):
+        print("{0}+{1}j".format(self.real,self.imag))
+        
+
 def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
     """ Subspace Clustering using Cheng Implementation
     :param Xp: DxNp matrix, each column is a point
