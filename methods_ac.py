@@ -4,6 +4,7 @@ Created on Sun Mar 29 14:11:54 2020
 
 @author: Jared
 """
+from typing import Dict, List, Any, Union
 
 import numpy as np
 import cvxpy as cp
@@ -105,22 +106,77 @@ class AC_manager:
         cvx_moment:
             dictionary containing moment information for problem
         """
-        
-        return 0
+        Mth = cvx_moment["Mth"]
+        C_moment = cvx_moment["C"]
+        C_classify = []
+        M = []
+        S = []
+
+        for i in range(len(self.model)):
+            cvx_out = self.model[i].generate_classify(Xp, eps, Mth[i])
+            M += cvx_out["M"]
+            S += cvx_out["S"]
+            C_classify += cvx_out["C"]
+
+        C = C_moment + C_classify
+
+        cvx_classify = {"C": C, "M": M, "Mth": Mth, "S": S, "TH": cvx_moment["TH"]}
+        return cvx_classify
         
 
     def generate_SDP(self, Xp, eps):
         cvx_moment = self.moment_SDP()
         cvx_classify = self.classify_SDP(Xp, eps, cvx_moment)
 
-
         return cvx_classify
 
-    def solve_SDP(self, RwHopt):
+    def solve_SDP(self, cvx_classify, RwHopt):
         #solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
         # Anything that sticks
 
-        pass
+        #take variables that have been formulated from the SDP
+        Mth = cvx_classify["Mth"]
+        M = cvx_classify["M"]
+        C = cvx_classify["C"]
+        S = cvx_classify["S"]
+        TH = cvx_classify["TH"]
+
+
+        #Reweighted heuristic for rank-1 magic
+        W = [np.eye(mth.shape[0]) +RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth]
+        rank1ness = np.zeros([RwHopt.maxIter, 1])
+
+
+        for iter in range(0, RwHopt.maxIter):
+            print('   - R.H. iteration: ', iter)
+            cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+            objective = cp.Minimize(cost)
+            prob = cp.Problem(objective, C)
+            sol = prob.solve(solver=cp.MOSEK)
+
+            for i in range(Nclass):
+                val, vec = np.linalg.eig(Mth[i].value)
+                [sortedval, sortedvec] = sortEigens(val, vec)
+                rank1ness[iter] = sortedval[0] / np.sum(sortedval)
+                W[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+
+            if rank1ness[iter] > RwHopt.eigThres:
+                iter = iter + 1  # To fill rank1ness vector
+                break
+
+        TH_out = [[t.value for t in T] for T in TH]
+        S_out = [[t.value for t in T] for T in S]
+
+        return {"cost": cost, "W": W, "M": [m.value for m in M], "mom": Mom_con, "S": S_out, "TH": TH_out,
+                "rank1ness": rank1ness}
+
+    def run_SDP(self, Xp, eps, RwHopt):
+        """Main routine, take everything together. All model synthesis routines + running the solver"""
+        cvx_classify = self.generate_SDP(Xp, eps)
+        cvx_result = self.solve_SDP(cvx_classify, RwHopt)
+
+        return cvx_result
+
 
 class Model:
     """A model that might plausibly generate observed data (example circle, subspace, curve)"""
@@ -249,18 +305,94 @@ class Model:
 
         C = con_one + con_mom + con_geom_eq + con_geom_ineq + con_symmetry
 
-        cvx_out = {"Mth": Mth, "C", C}
+        #extract parameters theta
+        TH_ind = [mom["cons"][tuple(i)][0] for i in np.eye(Nth).tolist()]
+        TH = [[Mth[count][thi] for thi in TH_ind] for count in range(mult)]
+
+
+        cvx_out = {"Mth": Mth, "C", C, "TH": TH}
 
         return cvx_out
 
-    def classify_SDP(self, sizes, Mth):
-        """Classify data in Xp, eps given current model Mth (no multiplicity here)"""
+    def generate_classify(self, Xp, eps, Mth):
+        """Run the classify generation routine"""
+
+        sizes = [len(self.eq), len(self.ineq), len(self.eq_geom), len(self.ineq_geom)]
+
+        cvx_out = self.classify_SDP(sizes, self.moment, Xp, eps, Mth)
+
+        return cvx_out
+
+    def classify_SDP(self, sizes, mom, Xp, eps, Mth):
+        """Classify data in Xp, eps given current model Mth (with multiplicity)"""
 
         #TODO Implement the classificatiton for a given model instance. This will require returning a set of matrices M
         # as well as a set of new constraints C linking them together. Call classify_SDP from AC_manager, and combine
         # together into a new program
+        [D, Np] = Xp.shape
+        mult = len(Mth)
+        len(mom["supp"])
+        #simple implementation first
+        #then trim out unnecessary variables
+        #M = [cp.variable()]
+        M = [] #moment matrix
+        S = [None] * Nclass #output labels
 
-        pass
+        # new constraints
+        con_classify = []
+        con_bin = []
+        con_mom = []
+
+        Ns = len(m["supp"])
+        for im in range(mult):
+            Mi = []
+            monom_poly = mom["monom_poly"][im]
+            #monom_ind = [mom["lookup"][mp][0] for mp in monom_poly]
+            monom_idx = [mom["supp"].index(mp) for mp in monom_poly]
+            ind_1 = mom["supp"].index(tuple([0] * Nth))
+
+            for ip in range(Np):
+                m = cp.variable(Ns+1, Ns+1)
+                con_mom += [(m[:-1, :-1] == Mth[im])]
+                Mi.append(m)
+
+                con_bin += [(m[ind_1, -1] == m[-1, -1])]
+
+                s_curr = m[ind_1, -1]
+                if ip == 0:
+                    S[im] = [s_curr]
+                else:
+                    S[im] += [s_curr]
+
+
+
+                #now classify according to the data
+                # equality constriants
+                for k in range(sizes[0] + sizes[1]):
+                    coeff_curr = mom["fb"][k](*Xp[:, ip])
+
+
+                    rs_curr = m[monom_idx, -1]
+
+                    f_curr =  rs_curr @ coeff_curr
+                    if k < sizes[0]:
+                        #equality constraint
+                        con_classify += [-eps*s_curr <= f_curr, f_curr <= eps*s_curr]
+                    else:
+                        #inequality constraint >= 0
+                        con_classify += [f_curr <= eps*s_curr]
+                    pass
+
+            M += [Mi]
+            #m = [cp.variable(Ns+1, Ns+1) for i in range(Np)]
+            #C += [m[i][:-1, :-1] == Mth[im] for i in range(Np)]
+
+        C = con_classify + con_bin + con_mom
+
+        cvx_out = {"C": C, "M": M, "S": S}
+
+        return cvx_out
+
 
 
 
