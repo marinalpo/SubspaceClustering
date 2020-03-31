@@ -26,14 +26,10 @@ class AC_manager:
     th: sympy array
         parameter sympy variables, want to solve
     
-    P: list of models (each is a list of sympy polynomials)
+    model: list of models (model class, semialgebraic sets)
         Polynomial models f(x; theta) that generate data
     mult: list of integers
-        multiplicity of each model in data (e.g. 5 lines and 2 circles w/ radius 1)            
-    n_eq: list of integers
-        number of equality constraints per model
-    n_ineq: list of integers
-        number of inequality constraints per model
+        multiplicity of each model in data (e.g. 5 lines and 2 circles w/ radius 1)
     """
     
     def __init__(self, x, th):
@@ -42,34 +38,27 @@ class AC_manager:
         self.th = th;
 
 
-        #models o
-        self.P = []
+        #polynomial models under consideration
+        self.model = []
         self.mult = []
-        self.n_eq = []
-        self.n_ineq = []
+        self.Nclass = 0
+
         
-        self.mom_con = []
-        
-    def add_model(self, P, n_eq, n_ineq, mult):
+    def add_model(self, model_new, mult):
         """Add new polynomial model to system
         
         Parameters
-        ----------        
-        P: list of sympy polynomials
+        ----------
+        model_new: model class
             New polynomial models f(x; theta) that generate data
-            [f; hi(x) == 0; gj(x) >= 0]
-        n_ineq: integer
-            Number of equality constraints in list P
-        n_eq: integer
-            Number of inequality constraints in list P
+            generalized to semialgebraic sets
         mult: integer
             multiplicity of each model in data (e.g. 5 lines and 2 circles w/ radius 1)      
         
         """        
-        self.P += [P]
-        self.n_eq   += [n_eq]
-        self.n_ineq += [n_ineq]
-        self.mult   += [mult]
+        self.model += [model_new]
+        self.mult  += [mult]
+        self.Nclass += mult
                 
 
     def moment_SDP(self):
@@ -82,6 +71,7 @@ class AC_manager:
         con_one:        [0,0...0] entry of moment matrix is 1
         con_mom:        Parameter (theta) entries obey moment structure
         con_geom:       Models obey geometric constraints g(theta) >= 0, h(theta) == 0
+
         con_bin:        binary classification: s^2 = s
         con_assign:     all datapoints are assigned to one and only one model class
 
@@ -90,22 +80,190 @@ class AC_manager:
         C = con_one + con_assign + con_mom + con_bin + con_classify + con_geom
 
         """
+        Mth = []
+        C = []
+        count = 0
 
-        Mom_con = [ACmomentConstraint(p, var) for p in P]
-        pass
+        #Iterate through all classes
+        for i in range(len(self.model)):
+            cvx_out = self.model[i].generate_moment(self.mult[i])
+            Mth += [cvx_out["Mth"]]
+            C += cvx_out["C"]
 
-    def classify_SDP(self, Xp, eps):
-        pass
+        cvx_moment = {"Mth": Mth, "C": C}
+        return cvx_moment
+
+    def classify_SDP(self, Xp, eps, cvx_moment):
+        """Constraints for model classification of data in Xp, as corrupted by bounded noise (eps)
+
+        Parameters
+        ----------
+        Xp: numpy ndarray
+            Data to be classified
+        eps: double
+            Noise bound in classification (assume scalar for now)
+        cvx_moment:
+            dictionary containing moment information for problem
+        """
+        
+        return 0
+        
 
     def generate_SDP(self, Xp, eps):
-        pass
+        cvx_moment = self.moment_SDP()
+        cvx_classify = self.classify_SDP(Xp, eps, cvx_moment)
+
+
+        return cvx_classify
 
     def solve_SDP(self, RwHopt):
         #solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
         # Anything that sticks
 
         pass
-        
+
+class Model:
+    """A model that might plausibly generate observed data (example circle, subspace, curve)"""
+    def __init__(self, x, th):
+        self.x = x
+        self.th = th
+
+        #depends on data and parameters
+        self.eq = []    #f(x, theta) == 0
+        self.ineq = []  #f(x, theta) >= 0
+
+        #depends only on parameters (geometric constraints)
+        self.eq_geom = []   #h(theta) == 0
+        self.ineq_geom = [] #g(theta) >= 0
+
+        self.moment = None
+
+    #add functions to the semialgebraic set description
+    def add_eq(self, eq_new):
+        if type(eq_new) == list:
+            self.eq += eq_new
+        else:
+            self.eq += [eq_new]
+
+    def add_ineq(self, ineq_new):
+        if type(ineq_new) == list:
+            self.ineq += ineq_new
+        else:
+            self.ineq += [ineq_new]
+
+    def add_eq_geom(self, eq_new):
+        if type(eq_new) == list:
+            self.eq_geom += eq_new
+        else:
+            self.eq_geom += [eq_new]
+
+    def add_ineq_geom(self, ineq_new):
+        if type(ineq_new) == list:
+            self.ineq_geom += ineq_new
+        else:
+            self.ineq_geom += [ineq_new]
+
+    def moment_constraint(self, eq, ineq, eq_geom, ineq_geom):
+        """Form moment constraints given semialgebraic set description"""
+        all_poly = ineq + eq + eq_geom + ineq_geom
+
+        moment = ACmomentConstraint(all_poly, [self.x, self.th])
+        return moment
+
+    def generate_moment(self, mult):
+
+        self.moment = self.moment_constraint(self.eq, self.ineq, self.eq_geom, self.ineq_geom)
+
+        sizes = [len(self.eq), len(self.ineq), len(self.eq_geom), len(self.ineq_geom)]
+
+        cvx_out = self.moment_SDP(sizes, self.moment, mult)
+
+        return cvx_out
+
+
+    def moment_SDP(self, sizes, mom, mult):
+        """
+        CVXPY constraints for moments, given semialgebraic set in model
+
+        :param: sizes - [#eq, #ineq, #eq_geom, #ineq_geom]
+        :param: moment - dictionary containing moment information for the current model
+        :param: mult - multiplicity of current model in classification task
+
+        :return: cvx_out - dictionary that contains the moment variable 'y' as well as constraints on moments 'C'
+        """
+
+        #moment matrix for each corner
+        #turn this into vectorized moments later
+        M_size = len(mom["supp"])
+        Mth = [cp.Variable(M_size, M_size, symmetric=True) for i in range(mult)]
+
+
+        #set up constraints
+        con_mom = []
+        con_geom = []
+
+        #[0,0,...0] entry of moment matrix is 1
+        Nth = len(self.th)
+        ind_1 = mom["monom_all"].index(tuple([0]*Nth))
+        con_one = [(Mth[i][ind_1, ind_1] == 1) for i in range(mult)]
+
+        #matrix obeys moment structure
+        con_mom = []
+        for monom, ind_agree in moment["cons"].items():
+            for iagree in range(len(ind_agree) - 1):
+                iprev = ind_agree[iagree]
+                inext = ind_agree[iagree + 1]
+                con_mom+= [(Mth[i][iprev] == Mth[i][inext]) for i in range(mult)]
+
+        #geometric constraints
+        con_geom_eq = []
+        con_geom_ineq = []
+        sizesc = np.cumsum(sizes)
+
+        #geometric equality constraints
+        monom_eq = mom["monom_all"][sizesc[1]:sizesc[2]]
+        monom_ind = [mom["lookup"][m][0] for m in monom_eq]
+
+        #fb_eq = mom["fb"][sizesc[1]:sizesc[2]]
+        coeff_eq = [mom["fb"][ieq](*([0] * Nth)) for ieq in range(sizesc[1], sizesc[2])]
+
+        #eval_eq = [(monom_curr[count] @ coeff_curr == 0)for count in range(mult)]
+        eval_eq = [(Mth[count].__getitem__(monom_ind[mi]) @ coeff_eq[mi] == 0) for count in range(mult) for mi in range(sizes[2])]
+
+        con_geom_eq = eval_eq
+
+        #inequality constraints
+        monom_ineq = mom["monom_all"][sizesc[2]:sizesc[3]]
+        monom_ind_ineq = [mom["lookup"][m][0] for m in monom_ineq]
+
+        #fb_eq = mom["fb"][sizesc[1]:sizesc[2]]
+        coeff_ineq = [mom["fb"][ieq](*([0] * Nth)) for ieq in range(sizesc[2], sizesc[3])]
+
+        #eval_eq = [(monom_curr[count] @ coeff_curr == 0)for count in range(mult)]
+        eval_ineq = [(Mth[count].__getitem__(monom_ind_ineq[mi]) @ coeff_ineq[mi] >= 0) for count in range(mult) for mi in range(sizes[3])]
+
+        con_geom_ineq = eval_ineq
+
+        #break symmetry between model classes in program with arbitrary constraint
+        con_symmetry = [(Mth[count][0,0] >= Mth[count+1][0,0]) for count in range(mult-1)]
+
+        C = con_one + con_mom + con_geom_eq + con_geom_ineq + con_symmetry
+
+        cvx_out = {"Mth": Mth, "C", C}
+
+        return cvx_out
+
+    def classify_SDP(self, sizes, Mth):
+        """Classify data in Xp, eps given current model Mth (no multiplicity here)"""
+
+        #TODO Implement the classificatiton for a given model instance. This will require returning a set of matrices M
+        # as well as a set of new constraints C linking them together. Call classify_SDP from AC_manager, and combine
+        # together into a new program
+
+        pass
+
+
+
 
 def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
     """ Subspace Clustering using Cheng Implementation
@@ -183,7 +341,8 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
             Mth.append(m[:Ns[ic], :Ns[ic]])
             
             #"corner" of moment matrix is 1
-            ind_1 = len(mom["monom_all"])-1
+            #ind_1 = len(mom["monom_all"])-1
+            ind_1 = mom["monom_all"].index(tuple([0]*Nth))
             con_one.append(M[count][ind_1, ind_1] == 1)
             #r_curr = M[count][ind_1, :Nm[ic]]
             #R[count] = r_curr    
@@ -299,56 +458,3 @@ def AC_CVXPY(Xp, eps, var, P, mult, RwHopt): #, , delta
     # ind_r = lambda i, d: (1 + i * D + d)
     # ind_s = lambda i, j: (1 + Ns * D + j * Ns + i)
 
-    # # Create variables
-    # M = []
-    # for j in range(0, Np):  # For each point
-    #     m = cp.Variable((1 + Ns * D + Ns, 1 + Ns * D + Ns), PSD=True)
-    #     M.append(m)  # M[j] should be PSD
-
-    # R = cp.Variable((1 + Ns * D, 1 + Ns * D))
-    # C = []  # Constraints that are fixed through iterations
-
-    # for j in range(0, Np):  # For each point
-    #     C.append(M[j][np.ix_(np.arange(0, 1 + Ns * D),
-    #                          np.arange(0, 1 + Ns * D))] == R)  # Upper left submatrix of M_j should be
-    #     C.append(cp.sum(M[j][0, ind_s(np.arange(0, Ns), 0)]) == 1)
-    #     for i in range(0, Ns):
-    #         C.append(M[j][0, ind_s(i, 0)] == M[j][ind_s(i, 0), ind_s(i, 0)])
-    #         C.append(((M[j][ind_r(i, np.arange(0, D)), ind_s(i, 0)].T * Xp[:, j]) - eps * M[j][0, ind_s(i, 0)]) <= 0)
-    #         C.append(((-M[j][ind_r(i, np.arange(0, D)), ind_s(i, 0)].T * Xp[:, j]) - eps * M[j][0, ind_s(i, 0)]) <= 0)
-    # C.append(R[0, 0] == 1)
-
-    # for i in range(0, Ns):  # For each subspace
-    #     C.append(cp.trace(R[np.ix_(ind_r(i, np.arange(0, D)), ind_r(i, np.arange(0, D)))]) == 1)
-
-    # W = np.eye(1 + Ns * D) + delta * np.random.randn(1 + Ns * D, 1 + Ns * D)
-    # rank1ness = np.zeros(RwHopt.maxIter)
-
-    # tic = time()
-    # for iter in range(0, RwHopt.maxIter):
-    #     print('   - R.H. iteration: ', iter)
-    #     objective = cp.Minimize(cp.trace(W.T * R))
-    #     prob = cp.Problem(objective, C)
-    #     sol = prob.solve(solver=cp.MOSEK)
-    #     val, vec = np.linalg.eig(R.value)
-    #     [sortedval, sortedvec] = sortEigens(val, vec)
-    #     rank1ness[iter] = sortedval[0] / np.sum(sortedval)
-    #     W = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
-
-    #     if rank1ness[iter] > RwHopt.eigThres:
-    #         iter = iter + 1  # To fill rank1ness vector
-    #         break
-
-    # runtime = time() - tic
-
-    # S = np.zeros((Ns, Np))
-    # for j in range(0, Np):
-    #     S[:, j] = M[j][1 + (Ns) * (D):, 0].value
-
-    # rank1ness = rank1ness[0:iter]
-
-    # R = np.zeros((Ns, D))
-    # for i in range(0, Ns):
-    #     R[i, :] = M[0][ind_r(i, np.arange(0, D)), 0].value
-
-    # return R, S, runtime, rank1ness

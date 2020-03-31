@@ -254,6 +254,7 @@ def ACmomentConstraint(p, var):
 
 
     #augmented support set, 1 + half_support + current support
+    #TODO: This is incorrect, breaks the lexicographic ordering and many assumptions. Fix this
     aug_support = monom_all + add_z + [i for i in half_support if i not in monom_all]
     
     
