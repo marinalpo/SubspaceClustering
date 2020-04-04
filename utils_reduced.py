@@ -162,6 +162,10 @@ def extract_monom(var, P0):
     th = var[1]
     
     P = [sp.Poly(p, *th) for p in P0]
+
+    #which constraints are geometric in parameters theta, and don't involve current data x?
+    geom = [sp.Poly(p, *x).degree() == 0 for p in P0]
+
     
     monom = [list(p.monoms()) for p in P]
     coeff = [np.array(p.coeffs()) for p in P]
@@ -182,7 +186,7 @@ def extract_monom(var, P0):
     
     # if "ineq" in cons.keys():
     #     g = [sp.Poly(gi, *th) for gi in cons["ineq"]]
-    return {"fb": fb, "monom_poly": monom, "coeff": coeff, "A_pre": supp_monom}
+    return {"fb": fb, "monom_poly": monom, "coeff": coeff, "A_pre": supp_monom, "geom": geom}
     
 
 def ACmomentConstraint(p, var):
@@ -211,8 +215,6 @@ def ACmomentConstraint(p, var):
     #extract the polynomial and variables    
     x = var[0]
     th = var[1]
-    # P = sp.Poly(p, *th)
-    
 
 
     #Identify support set, prepare for polytope reduction
@@ -231,7 +233,7 @@ def ACmomentConstraint(p, var):
     fb = fout["fb"]
     A_pre = fout["A_pre"]
     monom_poly = fout["monom_poly"]
-    
+    geom = fout["geom"]
         
     #add in constant term?
     z_blank = np.zeros([1, A_pre.shape[1]])
@@ -256,7 +258,14 @@ def ACmomentConstraint(p, var):
 
     #augmented support set, 1 + half_support + current support
     #TODO: This is incorrect, breaks the lexicographic ordering and many assumptions. Fix this
-    aug_support = monom_all + add_z + [i for i in half_support if i not in monom_all]
+    #aug_support = monom_all + add_z + [i for i in half_support if i not in monom_all]
+    monom_classify = sum([[list(m) for m in monom_poly[i]] for i in range(len(geom)) if not geom[i]], [])
+    #for i = range(monom_poly):
+    #    if geom[i]:
+
+
+    all_support = half_support + add_z + monom_classify
+    aug_support = np.flip(np.unique(np.array(all_support), axis=0), axis=0).tolist()
     
     
     #lookup table to associate generating indices with monomials

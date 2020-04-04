@@ -148,28 +148,32 @@ class AC_manager:
         Mth = [item for sublist in Mth_structured for item in sublist]
         # Reweighted heuristic for rank-1 magic
         Nclass = len(Mth)
-        W = [np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth]
+
+        #https: // www.cvxpy.org / tutorial / advanced / index.html  # disciplined-parametrized-programming
+        blocksize = [mth.shape[0] for mth in Mth]
+        W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
+        W_val = [(Wv + Wv.T)*0.5 for Wv in W_val]
+        W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
         #W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
         rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
+
+        cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+        objective = cp.Minimize(cost)
 
         iter = 0
         #for iter in range(0, RwHopt.maxIter):
         while iter < RwHopt.maxIter:
             print('   - R.H. iteration: ', iter)
-            cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
-            objective = cp.Minimize(cost)
+            for i in range(Nclass):
+                W[i].value = W_val[i]
             prob = cp.Problem(objective, C)
-            sol = prob.solve(solver=cp.MOSEK, verbose = True)
+            sol = prob.solve(solver=cp.MOSEK, verbose = False)
 
-            #count =
-            #for i in range(len(self.mult)):
-            #    Mth_curr = Mth[i]
-            #    for im in range(self.mult[i]):
             for i in range(Nclass):
                 val, vec = np.linalg.eig(Mth[i].value)
                 [sortedval, sortedvec] = sortEigens(val, vec)
                 rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
-                W[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+                W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
 
 
             if min(rank1ness[iter, :]) > RwHopt.eigThres:
@@ -178,12 +182,101 @@ class AC_manager:
             iter = iter + 1  # To fill rank1ness vector
 
         TH_out = [[t.value for t in T] for T in TH]
-        S_out = [[t.value for t in T] for T in S]
+        S_out = np.array([[t.value for t in T] for T in S])
         M_out  = [[m.value for m in mc] for mc in M]
         Mth_out =  [m.value for m in Mth]
 
         return {"cost": cost, "W": W,  "S": S_out, "TH": TH_out,
-                "rank1ness": rank1ness, "M": M_out, "Mth_out":Mth}
+                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
+
+    def solve_SDP_rstar(self, cvx_classify):
+        # solve the SDP through the r* norm method
+
+        # take variables that have been formulated from the SDP
+        Mth_structured = cvx_classify["Mth"]
+        M = cvx_classify["M"]
+        C = cvx_classify["C"]
+        S = cvx_classify["S"]
+        TH = cvx_classify["TH"]
+
+        Mth = [item for sublist in Mth_structured for item in sublist]
+        # Reweighted heuristic for rank-1 magic
+        Nclass = len(Mth)
+
+        #https://arxiv.org/pdf/1612.03186.pdf page 13
+        #
+        r = 0.1
+        blocksize = [mth.shape[0] for mth in Mth]
+        W1 = [cp.Variable((bi, bi), PSD=True) for bi in blocksize]
+        W2 = [cp.Variable((bi, bi), symmetric=True) for bi in blocksize]
+        k = cp.Variable(Nclass)
+
+        #parameters in the r* model
+        cost = cp.sum([cp.trace(W2[i]) + k[i] for i in range(Nclass)])
+        con_r_star = []
+        for i in range(len(Mth)):
+            bl = blocksize[i]
+            I = np.eye(bl)
+            con_trace = (cp.trace(W1[i]) == (bl - r)*k[i])
+            con_psd = (W1[i] >> 0)
+            B = cp.bmat([[k[i] * I - W1[i], Mth[i]], [Mth[i].T, W2[i]]])
+            con_lmi = (B >> 0)
+            con_r_star += [con_trace, con_psd, con_lmi]
+
+        C += con_r_star
+
+        objective = cp.Minimize(cost)
+        prob = cp.Problem(objective, C)
+        sol = prob.solve(solver=cp.MOSEK, verbose = True)
+
+
+        rank1ness = [0]*Nclass
+
+        for i in range(Nclass):
+            val, vec = np.linalg.eig(Mth[i].value)
+            [sortedval, sortedvec] = sortEigens(val, vec)
+            rank1ness[i] = sortedval[0] / np.sum(sortedval)
+            #W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+
+        # W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
+        # W_val = [(Wv + Wv.T)*0.5 for Wv in W_val]
+        # W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
+        # #W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
+        # rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
+        #
+        # cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+        # objective = cp.Minimize(cost)
+        #
+        # iter = 0
+        # #for iter in range(0, RwHopt.maxIter):
+        #
+        # while iter < RwHopt.maxIter:
+        #     print('   - R.H. iteration: ', iter)
+        #     for i in range(Nclass):
+        #         W[i].value = W_val[i]
+        #     prob = cp.Problem(objective, C)
+        #     sol = prob.solve(solver=cp.MOSEK, verbose = False)
+        #
+        #     for i in range(Nclass):
+        #         val, vec = np.linalg.eig(Mth[i].value)
+        #         [sortedval, sortedvec] = sortEigens(val, vec)
+        #         rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
+        #         W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+        #
+        #
+        #     if min(rank1ness[iter, :]) > RwHopt.eigThres:
+        #         iter = RwHopt.maxIter
+        #
+        #     iter = iter + 1  # To fill rank1ness vector
+
+        TH_out = [[t.value for t in T] for T in TH]
+        S_out = np.array([[t.value for t in T] for T in S])
+        M_out  = [[m.value for m in mc] for mc in M]
+        Mth_out =  [m.value for m in Mth]
+
+        return {"cost": cost, "S": S_out, "TH": TH_out,
+                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
+
 
     def run_SDP(self, Xp, eps, RwHopt):
         """Main routine, take everything together. All model synthesis routines + running the solver"""
