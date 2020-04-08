@@ -281,7 +281,7 @@ def ACmomentConstraint(p, var):
            else:
                lookup[s] = [(ui, vi)]
      
-    M_out = {"supp" : aug_support, "monom_all": monom_all, "monom_poly": monom_poly, "cons" : lookup, "fb": fb}            
+    M_out = {"supp": aug_support, "monom_all": monom_all, "monom_poly": monom_poly, "cons": lookup, "fb": fb, "geom":geom}
     #M_out = {"supp" : aug_support, "half_supp" : half_support, "monom": monom, "cons" : lookup, "fb": fb}            
     
     return M_out
