@@ -134,7 +134,14 @@ def varietySample(V, x, count_max, R2, eps_bound):
         pnorm = np.sum(p**2, 0)
         
         pcand= p[:, pnorm <= R2]
-        
+
+        # if pcand.shape[1] <= 1:
+        #     pcand0 = pcand
+        # else:
+        #     #pcand0 = pcand[:, 0]
+        #     pcand0 = pcand[..., 0][:, np.newaxis] #this is dumb
+        #
+        # P = np.concatenate([P, pcand0], 1)
         P = np.concatenate([P, pcand], 1)
         
         #start new sampling iteration

@@ -162,7 +162,8 @@ class AC_manager:
 
         iter = 0
         #for iter in range(0, RwHopt.maxIter):
-        while iter < RwHopt.maxIter:
+        #while iter < RwHopt.maxIter:
+        for iter in range(RwHopt.maxIter):
             #print('   - R.H. iteration: ', iter)
             for i in range(Nclass):
                 W[i].value = W_val[i]
@@ -177,9 +178,10 @@ class AC_manager:
             print("\t R.H. iteration: \t {:d} \t rank1ness: {:05.3f}".format(iter, np.min(rank1ness[iter, :])))
             #print('   - R.H. iteration: ', iter, '\t rank1ness: ', np.max(rank1ness[iter, :]))
             if min(rank1ness[iter, :]) > RwHopt.eigThres:
-                iter = RwHopt.maxIter
+                #iter = RwHopt.maxIter
+                break
 
-            iter = iter + 1  # To fill rank1ness vector
+            #iter = iter + 1  # To fill rank1ness vector
 
         TH_out = [[t.value for t in T] for T in TH]
         S_out = np.array([[t.value for t in T] for T in S])
@@ -187,7 +189,7 @@ class AC_manager:
         Mth_out =  [m.value for m in Mth]
 
         return {"cost": cost, "W": W,  "S": S_out, "TH": TH_out,
-                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
+                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out, "iter":iter}
 
     def solve_SDP_rstar(self, cvx_classify):
         # solve the SDP through the r* norm method
@@ -373,7 +375,7 @@ class Model:
                 #get the moments involved in the geometric constraints
                 #evaluate the polynomials, and constrain the moments accordingly
                 monom_curr = mom["monom_poly"][k]
-                monom_ind  = [mom["cons"][m][0] for m in monom_curr]
+                monom_ind = [mom["cons"][m][0] for m in monom_curr]
                 coeff_curr = mom["fb"][k](*[0]*Nth)
                 mom_curr = [cp.sum([Mth[i][monom_ind[t]] * coeff_curr[t] for t in range(len(coeff_curr))]) for i in range(mult)]
                 if k < sizes[0]:
@@ -438,21 +440,28 @@ class Model:
             # monom_idx = [mom["supp"].index(list(mp)) for mp in monom_poly]
             ind_1 = mom["supp"].index([0] * Nth)
 
+
             # TODO: refine this so only monomials in the active polynomial are active, and the other monomials/lifts
             #  are not present in the classifier psd blocks.
             #  This will be done automatically in the future by the chordal decomposition code
-            monom_idx = [[mom["supp"].index(list(m)) for m in mp] for mp in monom_poly]
+
+
+
+
 
             for k in range(sizes[0] + sizes[1]):
-                mi_curr = monom_idx[k]
-                Nsupp = len(mi_curr)
-
                 if not mom["geom"][k]:
+                    monom_idx = [mom["supp"].index(list(m)) for m in monom_poly[k]]
+                    if ind_1 not in monom_idx:
+                        monom_idx += [ind_1]
+
+                    Nmonom = len(monom_idx)
+
                     for ip in range(Np):
                         coeff_curr = mom["fb"][k](*Xp[:, ip])
                         #This is inefficient, the blocks are too large
-                        m = cp.Variable((Ns + 1, Ns + 1), PSD=True)
-                        con_mom_agree += [(m[:-1, :-1] == Mth[im])]
+                        m = cp.Variable((Nmonom + 1, Nmonom + 1), PSD=True)
+                        con_mom_agree += [(m[:-1, :-1] == Mth[im][monom_idx])]
                         Mi.append(m)
 
                         con_bin += [(m[ind_1, -1] == m[-1, -1])]
@@ -462,7 +471,7 @@ class Model:
                             S[im] = [s_curr]
                         else:
                             S[im] += [s_curr]
-                        rs_curr = m[mi_curr, -1]
+                        rs_curr = m[0:-1, -1]
 
                         f_curr = rs_curr @ coeff_curr
                         if k < sizes[0]:
