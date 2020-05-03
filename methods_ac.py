@@ -19,7 +19,7 @@ class AC_manager:
     Classify data into a set of polynomial models under bounded noise
     class contains all functionality needed to perform AC
     Each class is a model of the form f(x; theta) = 0
-    Future: extend to semialgebraic clustering: f(x; theta) >= 0
+    Future: extend to semialgebraic clustering: f(x; theta) <= 0
     
     Parameters
     ----------
@@ -69,7 +69,7 @@ class AC_manager:
 
         con_one:        [0,0...0] entry of moment matrix is 1
         con_mom:        Parameter (theta) entries obey moment structure
-        con_geom:       Models obey geometric constraints g(theta) >= 0, h(theta) == 0
+        con_geom:       Models obey geometric constraints g(theta) <= 0, h(theta) == 0
 
         con_bin:        binary classification: s^2 = s
         con_assign:     all datapoints are assigned to one and only one model class
@@ -168,7 +168,7 @@ class AC_manager:
             for i in range(Nclass):
                 W[i].value = W_val[i]
             prob = cp.Problem(objective, C)
-            sol = prob.solve(solver=cp.MOSEK, verbose = False)
+            sol = prob.solve(solver=cp.MOSEK, verbose=False, save_file='circle_classify.task.gz')
 
             for i in range(Nclass):
                 val, vec = np.linalg.eig(Mth[i].value)
@@ -297,7 +297,7 @@ class Model:
 
         # depends on data and parameters
         self.eq = []  # f(x, theta) == 0
-        self.ineq = []  # f(x, theta) >= 0
+        self.ineq = []  # f(x, theta) <= 0
 
         self.moment = None
 
@@ -345,8 +345,8 @@ class Model:
         # moment matrix for each corner
         # turn this into vectorized moments later
         M_size = len(mom["supp"])
-        Mth = [cp.Variable((M_size, M_size), symmetric=True) for i in range(mult)]
-
+        # Mth = [cp.Variable((M_size, M_size), symmetric=True) for i in range(mult)]
+        Mth = [cp.Variable((M_size, M_size), PSD=True) for i in range(mult)]
         # set up constraints
         con_mom = []
 
@@ -364,7 +364,7 @@ class Model:
                 con_mom += [(Mth[i][iprev] == Mth[i][inext]) for i in range(mult)]
 
         # break symmetry between model classes in program with arbitrary constraint
-        con_symmetry = [(Mth[count][ind_1-1, ind_1] >= Mth[count + 1][ind_1-1, ind_1]) for count in range(mult - 1)]
+        con_symmetry = [(Mth[count][ind_1-1, ind_1] <= Mth[count + 1][ind_1-1, ind_1]) for count in range(mult - 1)]
 
         #geometric constraints
         con_geom = []
@@ -377,17 +377,29 @@ class Model:
                 monom_curr = mom["monom_poly"][k]
                 monom_ind = [mom["cons"][m][0] for m in monom_curr]
                 coeff_curr = mom["fb"][k](*[0]*Nth)
-                mom_curr = [cp.sum([Mth[i][monom_ind[t]] * coeff_curr[t] for t in range(len(coeff_curr))]) for i in range(mult)]
-                if k < sizes[0]:
-                    #equality constraint
-                    con_geom += [mc == 0 for mc in mom_curr]
-                else:
-                    #inequality constraint
-                    con_geom += [mc >= 0 for mc in mom_curr]
+                #mom_curr = [cp.sum([Mth[i][monom_ind[t]] * coeff_curr[t] for t in range(len(coeff_curr))]) for i in range(mult)]
+
+                for i in range(mult):
+                    # pass
+                    m_curr = Mth[i][monom_ind]
+                    geom_eval = m_curr @ coeff_curr
+
+                    if k < sizes[0]:
+                        #equality constraint
+                        # con_geom += [mc == 0 for mc in mom_curr]
+                        con_geom += [geom_eval == 0]
+                    else:
+                        #inequality constraint
+                        #con_geom += [mc <= 0 for mc in mom_curr]
+                        con_geom += [geom_eval <= 0]
+                        # con_geom += [geom_eval == 2]
 
 
 
         C = con_one + con_mom + con_symmetry + con_geom
+        # C = con_geom + con_one + con_mom
+        #C = con_one + con_symmetry + con_mom
+
 
         # extract parameters theta
         TH_ind = [mom["cons"][tuple(i)][0] for i in np.eye(Nth).tolist()]
@@ -478,8 +490,8 @@ class Model:
                             # equality constraint
                             con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
                         else:
-                            # inequality constraint >= 0
-                            con_classify_ineq += [f_curr >= -eps * s_curr]
+                            # inequality constraint <= 0
+                            con_classify_ineq += [f_curr <= eps * s_curr]
                         pass
 
             M += [Mi]

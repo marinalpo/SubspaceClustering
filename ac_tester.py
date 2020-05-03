@@ -12,9 +12,10 @@ from utils_reduced import varietySample, RwHoptCond, extract_monom
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from methods_ac import Model, AC_manager
+import cvxpy as cp
 
 np.random.seed(42)
-RwHopt = RwHoptCond(20, 0.98, 1, 1e-3)
+RwHopt = RwHoptCond(1, 0.98, 1, 1e-3)
 
 Nx = 2
 Nth = 2
@@ -59,8 +60,8 @@ V_circle = (x[0] - th[0]) ** 2 + (x[1] - th[1]) ** 2 - 1
 # w2 = 0.25
 # w1 = 1e-4
 # w2 = 1e-4
-w1 = 0.5
-w2 = 0.5
+w1 = 1
+w2 = 1
 box1 = [[0-w1, 0+w1], [0-w1, 0+w1]]
 box2 = [[cx-w2, cx+w2], [cy-w2, cy+w2]]
 
@@ -69,7 +70,7 @@ circ1 = Model(x, th)
 circ1.add_eq(V_circle)
 
 
-circ1.add_ineq([th[0] - box1[0][0], box1[0][1] - th[0], th[1] -box1[1][0], box1[1][1] - th[1]])
+circ1.add_ineq([-th[0] + box1[0][0], -box1[0][1] + th[0], -th[1] +box1[1][0], -box1[1][1] + th[1]])
 # circ1.add_eq([th[0], th[1]])
 circ2 = Model(x, th)
 circ2.add_eq(V_circle)
@@ -77,14 +78,22 @@ circ2.add_eq(V_circle)
 # circ2.add_eq([th[0]-2, th[1]-3])
 # circ2.add_ineq([th[0] - 1.75, 2.25 - th[0], th[1] - 2.75, 3.25 - th[1]])
 
-
-circ2.add_ineq([th[0] - box2[0][0], box2[0][1] - th[0], th[1] -box2[1][0], box2[1][1] - th[1]])
+circ2.add_ineq([-th[0] + box2[0][0], -box2[0][1] + th[0], -th[1] +box2[1][0], -box2[1][1] + th[1]])
+# circ2.add_ineq([th[0] - box2[0][0], box2[0][1] - th[0], th[1] -box2[1][0], box2[1][1] - th[1]])
 ac.add_model(circ1, 1)
 ac.add_model(circ2, 1)
 
 tau = [1, 1]
 
-cvx_classify = ac.generate_SDP(X, eps_test)
+cvx_moment = ac.moment_SDP()
+
+prob0 = cp.Problem(cp.Minimize(0), cvx_moment["C"])
+sol0 = prob0.solve(solver=cp.MOSEK, verbose=False, save_file='circle_classify0.task.gz')
+
+cvx_classify = ac.classify_SDP(X, eps_test, cvx_moment)
+
+
+# cvx_classify = ac.generate_SDP(X, eps_test)
 #cvx_result = ac.solve_SDP_rstar(cvx_classify)
 cvx_result = ac.solve_SDP(cvx_classify, RwHopt, tau)
 #cvx_result = ac.run_SDP(X, eps_test, RwHopt)
