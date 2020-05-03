@@ -19,7 +19,7 @@ class AC_manager:
     Classify data into a set of polynomial models under bounded noise
     class contains all functionality needed to perform AC
     Each class is a model of the form f(x; theta) = 0
-    Future: extend to semialgebraic clustering: f(x; theta) <= 0
+    Future: extend to semialgebraic clustering: f(x; theta) >= 0
     
     Parameters
     ----------
@@ -69,7 +69,7 @@ class AC_manager:
 
         con_one:        [0,0...0] entry of moment matrix is 1
         con_mom:        Parameter (theta) entries obey moment structure
-        con_geom:       Models obey geometric constraints g(theta) <= 0, h(theta) == 0
+        con_geom:       Models obey geometric constraints g(theta) >= 0, h(theta) == 0
 
         con_bin:        binary classification: s^2 = s
         con_assign:     all datapoints are assigned to one and only one model class
@@ -134,11 +134,13 @@ class AC_manager:
 
         return cvx_classify
 
-    def solve_SDP(self, cvx_classify, RwHopt, tau):
+    def solve_SDP(self, cvx_classify, RwHopts):
         # solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
         # Anything that sticks
 
         # take variables that have been formulated from the SDP
+
+        s_penalize = RwHopt.s_penalize
         Mth_structured = cvx_classify["Mth"]
         M = cvx_classify["M"]
         C = cvx_classify["C"]
@@ -146,6 +148,7 @@ class AC_manager:
         TH = cvx_classify["TH"]
 
         Mth = [item for sublist in Mth_structured for item in sublist]
+        Ms  = [item for sublist in M for item in sublist]
         # Reweighted heuristic for rank-1 magic
         Nclass = len(Mth)
 
@@ -154,42 +157,67 @@ class AC_manager:
         W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
         W_val = [(Wv + Wv.T)*0.5 for Wv in W_val]
         W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
+
+        if s_penalize:
+            blocksizeM = [m.shape[0] for m in M]
+            WM_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksizeM]
+            WM_val = [(Wv + Wv.T)*0.05 for Wv in WM_val]
+            WM = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksizeM]
+
         #W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
         rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
 
-        cost = sum([tau[i] * cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+
+        cost_th = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+        if s_penalize:
+            cost = cost_th + sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
+        else:
+            cost = cost_th
+        # cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)]) +
         objective = cp.Minimize(cost)
 
         iter = 0
         #for iter in range(0, RwHopt.maxIter):
-        #while iter < RwHopt.maxIter:
-        for iter in range(RwHopt.maxIter):
-            #print('   - R.H. iteration: ', iter)
+        while iter < RwHopt.maxIter:
+            print('   - R.H. iteration: ', iter)
             for i in range(Nclass):
                 W[i].value = W_val[i]
+                if s_penalize:
+                    WM[i].value = WM_val[i]
             prob = cp.Problem(objective, C)
-            sol = prob.solve(solver=cp.MOSEK, verbose=False, save_file='circle_classify.task.gz')
+            sol = prob.solve(solver=cp.MOSEK, verbose = False)
 
             for i in range(Nclass):
                 val, vec = np.linalg.eig(Mth[i].value)
                 [sortedval, sortedvec] = sortEigens(val, vec)
                 rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
                 W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
-            print("\t R.H. iteration: \t {:d} \t rank1ness: {:05.3f}".format(iter, np.min(rank1ness[iter, :])))
-            #print('   - R.H. iteration: ', iter, '\t rank1ness: ', np.max(rank1ness[iter, :]))
-            if min(rank1ness[iter, :]) > RwHopt.eigThres:
-                #iter = RwHopt.maxIter
-                break
+                W_val[i] = W_val[i]/np.linalg.norm(W_val[i], 'fro')
 
-            #iter = iter + 1  # To fill rank1ness vector
+            if s_penalize:
+                for i in range(len(Ms)):
+                    val, vec = np.linalg.eig(Ms[i].value)
+                    [sortedval, sortedvec] = sortEigens(val, vec)
+                    # rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
+                    WM_val[i] = 0.1*np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+
+            if min(rank1ness[iter, :]) > RwHopt.eigThres:
+                iter = RwHopt.maxIter
+
+            iter = iter + 1  # To fill rank1ness vector
 
         TH_out = [[t.value for t in T] for T in TH]
         S_out = np.array([[t.value for t in T] for T in S])
         M_out  = [[m.value for m in mc] for mc in M]
         Mth_out =  [m.value for m in Mth]
 
-        return {"cost": cost, "W": W,  "S": S_out, "TH": TH_out,
-                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out, "iter":iter}
+        out_dict =  {"cost": cost, "W": W,  "S": S_out, "TH": TH_out,
+                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
+
+        if s_penalize:
+            out_dict["WM"] = WM
+
+        return s_penalize
 
     def solve_SDP_rstar(self, cvx_classify):
         # solve the SDP through the r* norm method
@@ -280,10 +308,10 @@ class AC_manager:
                 "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
 
 
-    def run_SDP(self, Xp, eps, RwHopt, tau):
+    def run_SDP(self, Xp, eps, RwHopt):
         """Main routine, take everything together. All model synthesis routines + running the solver"""
         cvx_classify = self.generate_SDP(Xp, eps)
-        cvx_result = self.solve_SDP(cvx_classify, RwHopt, tau)
+        cvx_result = self.solve_SDP(cvx_classify, RwHopt)
 
         return cvx_result
 
@@ -297,7 +325,7 @@ class Model:
 
         # depends on data and parameters
         self.eq = []  # f(x, theta) == 0
-        self.ineq = []  # f(x, theta) <= 0
+        self.ineq = []  # f(x, theta) >= 0
 
         self.moment = None
 
@@ -345,10 +373,11 @@ class Model:
         # moment matrix for each corner
         # turn this into vectorized moments later
         M_size = len(mom["supp"])
-        # Mth = [cp.Variable((M_size, M_size), symmetric=True) for i in range(mult)]
-        Mth = [cp.Variable((M_size, M_size), PSD=True) for i in range(mult)]
+        Mth = [cp.Variable((M_size, M_size), symmetric=True) for i in range(mult)]
+
         # set up constraints
         con_mom = []
+        con_geom = []
 
         # [0,0,...0] entry of moment matrix is 1
         Nth = len(self.th)
@@ -364,42 +393,9 @@ class Model:
                 con_mom += [(Mth[i][iprev] == Mth[i][inext]) for i in range(mult)]
 
         # break symmetry between model classes in program with arbitrary constraint
-        con_symmetry = [(Mth[count][ind_1-1, ind_1] <= Mth[count + 1][ind_1-1, ind_1]) for count in range(mult - 1)]
+        con_symmetry = [(Mth[count][0, 0] >= Mth[count + 1][0, 0]) for count in range(mult - 1)]
 
-        #geometric constraints
-        con_geom = []
-        for k in range(len(mom["geom"])):
-            if mom["geom"][k]:
-                #encode the geometric constraints
-
-                #get the moments involved in the geometric constraints
-                #evaluate the polynomials, and constrain the moments accordingly
-                monom_curr = mom["monom_poly"][k]
-                monom_ind = [mom["cons"][m][0] for m in monom_curr]
-                coeff_curr = mom["fb"][k](*[0]*Nth)
-                #mom_curr = [cp.sum([Mth[i][monom_ind[t]] * coeff_curr[t] for t in range(len(coeff_curr))]) for i in range(mult)]
-
-                for i in range(mult):
-                    # pass
-                    m_curr = Mth[i][monom_ind]
-                    geom_eval = m_curr @ coeff_curr
-
-                    if k < sizes[0]:
-                        #equality constraint
-                        # con_geom += [mc == 0 for mc in mom_curr]
-                        con_geom += [geom_eval == 0]
-                    else:
-                        #inequality constraint
-                        #con_geom += [mc <= 0 for mc in mom_curr]
-                        con_geom += [geom_eval <= 0]
-                        # con_geom += [geom_eval == 2]
-
-
-
-        C = con_one + con_mom + con_symmetry + con_geom
-        # C = con_geom + con_one + con_mom
-        #C = con_one + con_symmetry + con_mom
-
+        C = con_one + con_mom + con_symmetry
 
         # extract parameters theta
         TH_ind = [mom["cons"][tuple(i)][0] for i in np.eye(Nth).tolist()]
@@ -452,47 +448,38 @@ class Model:
             # monom_idx = [mom["supp"].index(list(mp)) for mp in monom_poly]
             ind_1 = mom["supp"].index([0] * Nth)
 
-
             # TODO: refine this so only monomials in the active polynomial are active, and the other monomials/lifts
-            #  are not present in the classifier psd blocks.
-            #  This will be done automatically in the future by the chordal decomposition code
+            #  are not present in the classifier psd blocks
+            monom_idx = [[mom["supp"].index(list(m)) for m in mp] for mp in monom_poly]
 
+            for ip in range(Np):
+                m = cp.Variable((Ns + 1, Ns + 1), PSD=True)
+                con_mom_agree += [(m[:-1, :-1] == Mth[im])]
+                Mi.append(m)
 
+                con_bin += [(m[ind_1, -1] == m[-1, -1])]
 
+                s_curr = m[ind_1, -1]
+                if ip == 0:
+                    S[im] = [s_curr]
+                else:
+                    S[im] += [s_curr]
 
+                # now classify according to the data
+                # equality constriants
+                for k in range(sizes[0] + sizes[1]):
+                    coeff_curr = mom["fb"][k](*Xp[:, ip])
+                    mi_curr = monom_idx[k]
+                    rs_curr = m[mi_curr, -1]
 
-            for k in range(sizes[0] + sizes[1]):
-                if not mom["geom"][k]:
-                    monom_idx = [mom["supp"].index(list(m)) for m in monom_poly[k]]
-                    if ind_1 not in monom_idx:
-                        monom_idx += [ind_1]
-
-                    Nmonom = len(monom_idx)
-
-                    for ip in range(Np):
-                        coeff_curr = mom["fb"][k](*Xp[:, ip])
-                        #This is inefficient, the blocks are too large
-                        m = cp.Variable((Nmonom + 1, Nmonom + 1), PSD=True)
-                        con_mom_agree += [(m[:-1, :-1] == Mth[im][monom_idx])]
-                        Mi.append(m)
-
-                        con_bin += [(m[ind_1, -1] == m[-1, -1])]
-
-                        s_curr = m[ind_1, -1]
-                        if ip == 0:
-                            S[im] = [s_curr]
-                        else:
-                            S[im] += [s_curr]
-                        rs_curr = m[0:-1, -1]
-
-                        f_curr = rs_curr @ coeff_curr
-                        if k < sizes[0]:
-                            # equality constraint
-                            con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
-                        else:
-                            # inequality constraint <= 0
-                            con_classify_ineq += [f_curr <= eps * s_curr]
-                        pass
+                    f_curr = rs_curr @ coeff_curr
+                    if k < sizes[0]:
+                        # equality constraint
+                        con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
+                    else:
+                        # inequality constraint >= 0
+                        con_classify_ineq += [f_curr >= -eps * s_curr]
+                    pass
 
             M += [Mi]
             # m = [cp.variable(Ns+1, Ns+1) for i in range(Np)]
