@@ -5,9 +5,9 @@ using TSSOS
 #Initialize points
 cx = 2
 cy = 3
-Nsample = 6
+Nsample = 10
 Ntotal = 2*Nsample
-theta_1 = rand(Nsample)
+theta_1 = rand(Nsample)*2*pi
 # x1 = [cos(th) for th in theta_1]
 # y1 = [sin(th) for th in theta_1]
 X1 = [(cos(th), sin(th)) for th in theta_1]
@@ -42,8 +42,10 @@ con_classify_2 = [V2_sub + s2.*eps_test; s2.*eps_test - V2_sub]
 con_assign = [s1[i] + s2[i] - 1 for i in 1:Ntotal]
 con_bin = [s1.^2-s1; s2.^2-s2]
 
-# con_geom = []
+# break symmetry?
 con_sym = [th1[1] >= th2[1]]
+#con_sym = []
+
 
 con_eq = [con_assign; con_bin]
 con_ineq = [con_sym; con_classify_1; con_classify_2]
@@ -53,9 +55,10 @@ f = 0
 
 pop = [f; con_ineq; con_eq]
 d = 2
-# opt, sol, data = blockcpop_first(pop, var, d, numeq = length(con_eq), method="clique", solve=false, solution=false)
+opt, sol, data = blockcpop_first(pop, var, d, numeq = length(con_eq), QUIET=true, method="chordal", solve=false, solution=false)
+opt,sol,data   =  blockcpop_higher!(data,QUIET=false, method="chordal", solve=true, solution=true)
 
-opt, sol, data = blockcpop_first(pop, var, d, numeq = length(con_eq), QUIET=false, method="clique", solve=true, solution=true)
+#opt, sol, data = blockcpop_first(pop, var, d, numeq = length(con_eq), QUIET=false, method="chordal", solve=true, solution=true)
 
 # opt,sol,data =  blockcpop_higher!(data,QUIET=true, method="clique", solve=false, solution=false)
 # opt,sol,data =  blockcpop_higher!(data,QUIET=false, method="clique", solve=true, solution=true)
