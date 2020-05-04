@@ -7,12 +7,12 @@ import polytope
 
 class RwHoptCond:
     # Conditions for reweighted heuristic
-    def __init__(self, maxIter, eigThres, corner, delta, s_penalize):
+    def __init__(self, maxIter, eigThres, delta, s_penalize, verbose):
         self.maxIter = maxIter    # number of max iterations
         self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
-        self.corner = corner      # rank-1 on corner (1) or on full matrix (0)
         self.delta = delta        # random pertubation for reweighted heuristic
-        self.s_penalize = 0       # penalize contributions of 's' block matrices
+        self.s_penalize = s_penalize       # penalize contributions of 's' block matrices
+        self.verbose = verbose
 
 
 def sortEigens(val, vec):
@@ -267,7 +267,12 @@ def ACmomentConstraint(p, var):
     #augmented support set, 1 + half_support + current support
     #TODO: This is incorrect, breaks the lexicographic ordering and many assumptions. Fix this
     #aug_support = monom_all + add_z + [i for i in half_support if i not in monom_all]
-    monom_classify = sum([[list(m) for m in monom_poly[i]] for i in range(len(geom)) if not geom[i]], [])
+    monom_data = np.array(sum([[list(m) for m in monom_poly[i]] for i in range(len(geom)) if not geom[i]], []))
+
+    keys_classify = np.lexsort(np.flipud(monom_data.T))
+
+    #monom_classify = monom_data[keys_classify, :].tolist()
+    monom_classify = monom_data.tolist()
     #for i = range(monom_poly):
     #    if geom[i]:
 
@@ -289,7 +294,8 @@ def ACmomentConstraint(p, var):
            else:
                lookup[s] = [(ui, vi)]
      
-    M_out = {"supp": aug_support, "monom_all": monom_all, "monom_poly": monom_poly, "cons": lookup, "fb": fb, "geom":geom}
+    M_out = {"supp": aug_support, "monom_all": monom_all, "monom_poly": monom_poly, "monom_classify":monom_classify,
+             "cons": lookup, "fb": fb, "geom":geom}
     #M_out = {"supp" : aug_support, "half_supp" : half_support, "monom": monom, "cons" : lookup, "fb": fb}            
     
     return M_out

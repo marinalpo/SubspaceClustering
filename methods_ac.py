@@ -19,7 +19,7 @@ class AC_manager:
     Classify data into a set of polynomial models under bounded noise
     class contains all functionality needed to perform AC
     Each class is a model of the form f(x; theta) = 0
-    Future: extend to semialgebraic clustering: f(x; theta) >= 0
+    Future: extend to semialgebraic clustering: f(x; theta) <= 0
     
     Parameters
     ----------
@@ -69,7 +69,7 @@ class AC_manager:
 
         con_one:        [0,0...0] entry of moment matrix is 1
         con_mom:        Parameter (theta) entries obey moment structure
-        con_geom:       Models obey geometric constraints g(theta) >= 0, h(theta) == 0
+        con_geom:       Models obey geometric constraints g(theta) <= 0, h(theta) == 0
 
         con_bin:        binary classification: s^2 = s
         con_assign:     all datapoints are assigned to one and only one model class
@@ -134,7 +134,7 @@ class AC_manager:
 
         return cvx_classify
 
-    def solve_SDP(self, cvx_classify, RwHopts):
+    def solve_SDP(self, cvx_classify, RwHopt):
         # solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
         # Anything that sticks
 
@@ -159,33 +159,48 @@ class AC_manager:
         W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
 
         if s_penalize:
-            blocksizeM = [m.shape[0] for m in M]
+            blocksizeM = [m.shape[0] for m in Ms]
             WM_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksizeM]
-            WM_val = [(Wv + Wv.T)*0.05 for Wv in WM_val]
+            WM_val = [(Wv + Wv.T)*0.2 for Wv in WM_val]
             WM = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksizeM]
 
         #W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
         rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
 
-
+        #random weighting on s
+        # S_weight = 1 + 0.1*np.random.rand(*S.shape)
+        # cost_s = sum([sum((1+0.1*np.random.rand(1, len(s))) * s) for s in S])
+        #
         cost_th = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+        cost_s = sum(sum([s @ (1+0.1*np.random.rand(len(s), 1)) for s in S]))
+
+
         if s_penalize:
-            cost = cost_th + sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
+            cost = cost_th + cost_s + sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
         else:
-            cost = cost_th
+            cost = cost_th + cost_s
+
+
         # cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)]) +
         objective = cp.Minimize(cost)
 
         iter = 0
+        infeasible = False
         #for iter in range(0, RwHopt.maxIter):
         while iter < RwHopt.maxIter:
-            print('   - R.H. iteration: ', iter)
+
             for i in range(Nclass):
                 W[i].value = W_val[i]
-                if s_penalize:
+
+            if s_penalize:
+                for i in range(len(Ms)):
                     WM[i].value = WM_val[i]
             prob = cp.Problem(objective, C)
-            sol = prob.solve(solver=cp.MOSEK, verbose = False)
+            sol = prob.solve(solver=cp.MOSEK, verbose=RwHopt.verbose)
+
+            if prob.status == 'infeasible':
+                infeasible = True
+                break
 
             for i in range(Nclass):
                 val, vec = np.linalg.eig(Mth[i].value)
@@ -201,8 +216,12 @@ class AC_manager:
                     # rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
                     WM_val[i] = 0.1*np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
 
-            if min(rank1ness[iter, :]) > RwHopt.eigThres:
-                iter = RwHopt.maxIter
+            minrank = min(rank1ness[iter, :])
+            # print('   - R.H. iteration: ', iter)
+            print(f'\t - R.H. iteration: {iter} \t rank1ness: {minrank:5.3}')
+            if minrank > RwHopt.eigThres:
+                # iter = RwHopt.maxIter
+                break
 
             iter = iter + 1  # To fill rank1ness vector
 
@@ -211,13 +230,15 @@ class AC_manager:
         M_out  = [[m.value for m in mc] for mc in M]
         Mth_out =  [m.value for m in Mth]
 
-        out_dict =  {"cost": cost, "W": W,  "S": S_out, "TH": TH_out,
-                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out}
+        # minrank = min(rank1ness[iter-1, :])
+
+        out_dict =  {"cost": cost, "W": W,  "S": S_out, "TH": TH_out, "infeasible":infeasible,
+                "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out, "rank1ness_min": minrank}
 
         if s_penalize:
             out_dict["WM"] = WM
 
-        return s_penalize
+        return out_dict
 
     def solve_SDP_rstar(self, cvx_classify):
         # solve the SDP through the r* norm method
@@ -325,7 +346,7 @@ class Model:
 
         # depends on data and parameters
         self.eq = []  # f(x, theta) == 0
-        self.ineq = []  # f(x, theta) >= 0
+        self.ineq = []  # f(x, theta) <= 0
 
         self.moment = None
 
@@ -376,12 +397,12 @@ class Model:
         Mth = [cp.Variable((M_size, M_size), symmetric=True) for i in range(mult)]
 
         # set up constraints
-        con_mom = []
         con_geom = []
 
         # [0,0,...0] entry of moment matrix is 1
         Nth = len(self.th)
-        ind_1 = mom["monom_all"].index([0] * Nth)
+        # ind_1 = mom["monom_classify"].index([0] * Nth)
+        ind_1 = -1
         con_one = [(Mth[i][ind_1, ind_1] == 1) for i in range(mult)]
 
         # matrix obeys moment structure
@@ -477,8 +498,8 @@ class Model:
                         # equality constraint
                         con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
                     else:
-                        # inequality constraint >= 0
-                        con_classify_ineq += [f_curr >= -eps * s_curr]
+                        # inequality constraint <= 0
+                        con_classify_ineq += [f_curr <= eps * s_curr]
                     pass
 
             M += [Mi]
