@@ -5,27 +5,37 @@ Created on Sun Mar 29 16:04:18 2020
 @author: Jared
 """
 
+import cvxpy as cp
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
-import cvxpy as cvx
-from utils_reduced import varietySample, RwHoptCond, extract_monom
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from methods_ac import Model, AC_manager
-import cvxpy as cp
 
-np.random.seed(42)
-max_iter = 15
+from methods_ac import Model, AC_manager
+from utils_reduced import varietySample, RwHoptCond
+
+np.random.seed(43)
+max_iter = 25
+s_perturb = [0.8, 0.05]
 s_penalize = False
 verbose = False
-RwHopt = RwHoptCond(max_iter, 0.99, 1e-2, s_penalize, verbose)
+s_rankweight = 0.01
+RwHopt = RwHoptCond(max_iter, 0.997, 1e-2, s_penalize, verbose, s_rankweight, s_perturb)
 
 Nx = 2
 Nth = 2
 
 #center of circle
-cx = 2
-cy = 3
+# cx1 = -1
+# cy1 = -1.5
+#
+# cx2 = 1
+# cy2 = 1.5
+
+cx1 = -0.65
+cy1 = 0
+cx2 = 0.65
+cy2 = 0
 
 x = sp.symarray("x", Nx)
 th = sp.symarray('th', Nth)
@@ -34,16 +44,19 @@ th = sp.symarray('th', Nth)
 
 
 eps_true = 0.05  # Noise level
-eps_test = 0.1
+eps_test = eps_true + 0.005
 # circle
 R2 = 1;
 V = x[0] ** 2 + x[1] ** 2 - R2;
-count_max = 30
 
-X1 = varietySample(V, x, count_max, R2, 0)
-X2 = varietySample(V, x, count_max, R2, 0)
 
-X2 = X2 + np.array([[cx], [cy]])
+Samples_max = 20
+
+X1 = varietySample(V, x, Samples_max, R2, eps_true)
+X2 = varietySample(V, x, Samples_max, R2, eps_true)
+
+X1 = X1 + np.array([[cx1], [cy1]])
+X2 = X2 + np.array([[cx2], [cy2]])
 X = np.append(X1, X2, axis=1)
 
 ac = AC_manager(x, th)
@@ -68,13 +81,13 @@ circ2.add_eq(V_circle)
 USE_BOX = 1
 
 if USE_BOX:
-    w1 = 2
-    w2 = 2
+    w1 = 1
+    w2 = 1
     #box1 = np.array([[0 - w1, 0 + w1], [0 - w1, 0 + w1]])
     #box2 = np.array([[cx - w2, cx + w2], [cy - w2, cy + w2]])
 
-    box_x = [min(0, cx) - w1, max(0, cx) + w2]
-    box_y = [min(0, cy) - w2, max(0, cy) + w2]
+    box_x = [min(cx1, cx2) - w1, max(cx1, cx2) + w2]
+    box_y = [min(cy1, cy2) - w2, max(cy1, cy2) + w2]
 
     box1 = np.array([box_x, box_y])
     box2 = np.array([box_x, box_y])
@@ -109,9 +122,9 @@ if USE_BOX:
     circ2.add_ineq(box2qu_ineq)
 
 
-ac.add_model(circ1, 1)
-ac.add_model(circ2, 1)
-
+# ac.add_model(circ1, 1)
+# ac.add_model(circ2, 1)
+ac.add_model(circ1, 2)
 # tau = [1, 1]
 
 cvx_moment = ac.moment_SDP()
@@ -167,7 +180,6 @@ if USE_BOX:
 
     rect2 = patches.Rectangle((box2[0][0], box2[1][0]), box2[0][1] - box2[0][0], box2[1][1] - box2[1][0], fill=False,
                               color="red")
-    # rect2 = patches.Rectangle((cx-w2, cy-w2), 2*w2, 2*w2, fill=False, color="red")
     ax.add_patch(rect2)
 
 minrank =cvx_result["rank1ness_min"]

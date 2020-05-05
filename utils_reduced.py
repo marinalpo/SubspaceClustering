@@ -7,12 +7,14 @@ import polytope
 
 class RwHoptCond:
     # Conditions for reweighted heuristic
-    def __init__(self, maxIter, eigThres, delta, s_penalize, verbose):
+    def __init__(self, maxIter, eigThres, delta, s_penalize, verbose, s_rankweight, s_perturb):
         self.maxIter = maxIter    # number of max iterations
         self.eigThres = eigThres  # threshold on the eigenvalue fraction for stopping procedure
         self.delta = delta        # random pertubation for reweighted heuristic
         self.s_penalize = s_penalize       # penalize contributions of 's' block matrices
         self.verbose = verbose
+        self.s_rankweight = s_rankweight
+        self.s_perturb = s_perturb
 
 
 def sortEigens(val, vec):
