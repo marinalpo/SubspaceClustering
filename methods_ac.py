@@ -125,6 +125,8 @@ class AC_manager:
 
         C = C_moment + C_classify + con_assign
 
+        S = np.array(S)
+
         cvx_classify = {"C": C, "M": M, "Mth": Mth, "S": S, "TH": cvx_moment["TH"]}
         return cvx_classify
 
@@ -159,7 +161,11 @@ class AC_manager:
         blocksize = [mth.shape[0] for mth in Mth]
         W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
         W_val = [(Wv + Wv.T) * 0.5 for Wv in W_val]
+        Ws_val = np.ones(S.shape)/np.sqrt(Nclass)
+
+
         W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
+        Ws = cp.Parameter(tuple(S.shape))
 
         if s_penalize:
             blocksizeM = [m.shape[0] for m in Ms]
@@ -175,7 +181,13 @@ class AC_manager:
         # cost_s = sum([sum((1+0.1*np.random.rand(1, len(s))) * s) for s in S])
         #
         cost_th = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
-        cost_s = sum(sum([s @ (RwHopt.s_perturb[0] + RwHopt.s_perturb[1] * np.random.rand(len(s), 1)) for s in S]))
+        #cost_s = sum(sum([s @ (RwHopt.s_perturb[0] + RwHopt.s_perturb[1] * np.random.rand(len(s), 1)) for s in S]))
+
+
+        #I am having far too much trouble in cvxpy to simply take <Ws, S>
+        #cost_s = np.sum(np.sum(S * Ws, axis=0),axis=0) * RwHopt.s_perturb
+        cost_s = sum([sum([Ws[i,j]*S[i,j] for i in range(Ws.shape[0])]) for j in range(Ws.shape[1])])
+
 
         if s_penalize:
             cost = cost_th + cost_s + RwHopt.s_rankweight * sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
@@ -193,6 +205,8 @@ class AC_manager:
             for i in range(Nclass):
                 W[i].value = W_val[i]
 
+            Ws.value = Ws_val
+
             if s_penalize:
                 for i in range(len(Ms)):
                     WM[i].value = WM_val[i]
@@ -203,6 +217,8 @@ class AC_manager:
                 infeasible = True
                 break
 
+
+            #Reweight the parameters in moment matrices
             for i in range(Nclass):
                 val, vec = np.linalg.eig(Mth[i].value)
                 [sortedval, sortedvec] = sortEigens(val, vec)
@@ -210,6 +226,13 @@ class AC_manager:
                 W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
                 W_val[i] = W_val[i] / np.linalg.norm(W_val[i], 'fro')
 
+            #Reweight the indicator variables
+            #indicator variables are always positive, so don't need to worry about absolute values
+            S_out = np.array([[t.value for t in T] for T in S])
+            Ws_val = 1/(S_out + 1e-4)
+            Ws_val = Ws_val/np.sqrt(np.sum(Ws_val**2, axis=0))
+
+            #Reweight the labeled moment matrices
             if s_penalize:
                 for i in range(len(Ms)):
                     val, vec = np.linalg.eig(Ms[i].value)
@@ -228,7 +251,7 @@ class AC_manager:
             iter = iter + 1  # To fill rank1ness vector
 
         TH_out = [[t.value for t in T] for T in TH]
-        S_out = np.array([[t.value for t in T] for T in S])
+
         M_out = [[m.value for m in mc] for mc in M]
         Mth_out = [m.value for m in Mth]
 

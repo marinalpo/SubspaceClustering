@@ -16,7 +16,8 @@ from utils_reduced import varietySample, RwHoptCond
 
 np.random.seed(43)
 max_iter = 25
-s_perturb = [0.8, 0.05]
+# s_perturb = [0.8, 0.05]
+s_perturb = 0.8
 s_penalize = False
 verbose = False
 s_rankweight = 0.01
@@ -26,16 +27,20 @@ Nx = 2
 Nth = 2
 
 #center of circle
-# cx1 = -1
-# cy1 = -1.5
-#
-# cx2 = 1
-# cy2 = 1.5
+cx1 = -1
+cy1 = -1.5
 
-cx1 = -0.65
-cy1 = 0
-cx2 = 0.65
-cy2 = 0
+cx2 = 1
+cy2 = 1.5
+
+# cx2 = 3
+# cy2 = 4
+
+
+# cx1 = -0.65
+# cy1 = 0
+# cx2 = 0.65
+# cy2 = 0
 
 x = sp.symarray("x", Nx)
 th = sp.symarray('th', Nth)
@@ -43,7 +48,7 @@ th = sp.symarray('th', Nth)
 # Pt = []
 
 
-eps_true = 0.05  # Noise level
+eps_true = 0.15  # Noise level
 eps_test = eps_true + 0.005
 # circle
 R2 = 1;
