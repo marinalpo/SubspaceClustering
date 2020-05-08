@@ -143,6 +143,7 @@ class AC_manager:
         # take variables that have been formulated from the SDP
 
         s_penalize = RwHopt.s_penalize
+        combine_theta = RwHopt.combine_theta
         Mth_structured = cvx_classify["Mth"]
         M = cvx_classify["M"]
         C = cvx_classify["C"]
@@ -159,13 +160,57 @@ class AC_manager:
 
         # https: // www.cvxpy.org / tutorial / advanced / index.html  # disciplined-parametrized-programming
         blocksize = [mth.shape[0] for mth in Mth]
-        W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
-        W_val = [(Wv + Wv.T) * 0.5 for Wv in W_val]
         Ws_val = np.ones(S.shape)/np.sqrt(Nclass)
 
 
-        W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
+        if combine_theta:
+            combined_size = sum([b-1 for b in blocksize]) + 1
+
+            #form the combined moment matrix and sew together constraints
+            Mall = cp.Variable((combined_size, combined_size), PSD=True)
+
+            con_combine = [Mall[-1, -1] == 1]
+
+            lo = 0
+            hi = 0
+            for mth in Mth:
+                curr_blocksize = mth.shape[0]
+                hi = lo + curr_blocksize-1
+
+                #equality constraints
+                curr_cons = []
+                curr_cons += [mth[:-1, :-1] == Mall[lo:hi, lo:hi]]
+                curr_cons += [mth[:-1, -1] == Mall[lo:hi, -1]]
+
+                lo = lo + curr_blocksize - 1
+
+                con_combine += curr_cons
+
+            C += con_combine
+            #penalize the rank of the combined moment matrix
+            W = cp.Parameter((combined_size, combined_size), symmetric=True)
+            cost_th = cp.trace(W @ Mall)
+
+            W_val = np.eye(combined_size) + RwHopt.delta * np.random.randn(combined_size)
+            W_val = (W_val + W_val.T)*0.5
+
+            rank1ness = np.zeros([RwHopt.maxIter, 1])
+        else:
+            W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
+            cost_th = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
+
+            W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
+            W_val = [(Wv + Wv.T) * 0.5 for Wv in W_val]
+
+            rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
+
+
+
+
+        #Reweighted L1-norm on all s sets, encourage points to be uniquely classified
+
         Ws = cp.Parameter(tuple(S.shape))
+        cost_s = sum([sum([Ws[i, j]*S[i, j] for i in range(Ws.shape[0])]) for j in range(Ws.shape[1])])
 
         if s_penalize:
             blocksizeM = [m.shape[0] for m in Ms]
@@ -173,28 +218,14 @@ class AC_manager:
             WM_val = [(Wv + Wv.T) for Wv in WM_val]
             WM = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksizeM]
 
-        # W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
-        rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
 
-        # random weighting on s
-        # S_weight = 1 + 0.1*np.random.rand(*S.shape)
-        # cost_s = sum([sum((1+0.1*np.random.rand(1, len(s))) * s) for s in S])
-        #
-        cost_th = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
-        #cost_s = sum(sum([s @ (RwHopt.s_perturb[0] + RwHopt.s_perturb[1] * np.random.rand(len(s), 1)) for s in S]))
-
-
-        #I am having far too much trouble in cvxpy to simply take <Ws, S>
-        #cost_s = np.sum(np.sum(S * Ws, axis=0),axis=0) * RwHopt.s_perturb
-        cost_s = sum([sum([Ws[i,j]*S[i,j] for i in range(Ws.shape[0])]) for j in range(Ws.shape[1])])
-
-
+        #additional encouragement by reweighting s-augmented moment matrices
         if s_penalize:
-            cost = cost_th + cost_s + RwHopt.s_rankweight * sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
+            cost_s_matrix = sum([cp.trace(WM[i] @ Ms[i]) for i in range(len(Ms))])
+            cost = cost_th + RwHopt.s_rankweight *( cost_s +cost_s_matrix)
         else:
-            cost = cost_th + cost_s
+            cost = cost_th + RwHopt.s_rankweight * cost_s
 
-        # cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)]) +
         objective = cp.Minimize(cost)
 
         iter = 0
@@ -202,8 +233,11 @@ class AC_manager:
         # for iter in range(0, RwHopt.maxIter):
         while iter < RwHopt.maxIter:
 
-            for i in range(Nclass):
-                W[i].value = W_val[i]
+            if combine_theta:
+                W.value = W_val
+            else:
+                for i in range(Nclass):
+                    W[i].value = W_val[i]
 
             Ws.value = Ws_val
 
@@ -219,12 +253,20 @@ class AC_manager:
 
 
             #Reweight the parameters in moment matrices
-            for i in range(Nclass):
-                val, vec = np.linalg.eig(Mth[i].value)
+            if combine_theta:
+                val, vec = np.linalg.eig(Mall.value)
                 [sortedval, sortedvec] = sortEigens(val, vec)
-                rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
-                W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
-                W_val[i] = W_val[i] / np.linalg.norm(W_val[i], 'fro')
+                rank1ness[iter] = sortedval[0] / np.sum(sortedval)
+                W_val = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+                W_val = W_val / np.linalg.norm(W_val, 'fro')
+
+            else:
+                for i in range(Nclass):
+                    val, vec = np.linalg.eig(Mth[i].value)
+                    [sortedval, sortedvec] = sortEigens(val, vec)
+                    rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
+                    W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
+                    W_val[i] = W_val[i] / np.linalg.norm(W_val[i], 'fro')
 
             #Reweight the indicator variables
             #indicator variables are always positive, so don't need to worry about absolute values
@@ -262,6 +304,9 @@ class AC_manager:
 
         if s_penalize:
             out_dict["WM"] = WM
+
+        if combine_theta:
+            out_dict["Mall"] = Mall.value
 
         return out_dict
 
@@ -311,38 +356,6 @@ class AC_manager:
             val, vec = np.linalg.eig(Mth[i].value)
             [sortedval, sortedvec] = sortEigens(val, vec)
             rank1ness[i] = sortedval[0] / np.sum(sortedval)
-            # W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
-
-        # W_val = [np.eye(bi) + RwHopt.delta * np.random.randn(bi) for bi in blocksize]
-        # W_val = [(Wv + Wv.T)*0.5 for Wv in W_val]
-        # W = [cp.Parameter((bi, bi), symmetric=True) for bi in blocksize]
-        # #W = [[np.eye(mth.shape[0]) + RwHopt.delta * np.random.randn(mth.shape[0]) for mth in Mth_mult] for Mth_mult in Mth]
-        # rank1ness = np.zeros([RwHopt.maxIter, sum(self.mult)])
-        #
-        # cost = sum([cp.trace(W[i] @ Mth[i]) for i in range(Nclass)])
-        # objective = cp.Minimize(cost)
-        #
-        # iter = 0
-        # #for iter in range(0, RwHopt.maxIter):
-        #
-        # while iter < RwHopt.maxIter:
-        #     print('   - R.H. iteration: ', iter)
-        #     for i in range(Nclass):
-        #         W[i].value = W_val[i]
-        #     prob = cp.Problem(objective, C)
-        #     sol = prob.solve(solver=cp.MOSEK, verbose = False)
-        #
-        #     for i in range(Nclass):
-        #         val, vec = np.linalg.eig(Mth[i].value)
-        #         [sortedval, sortedvec] = sortEigens(val, vec)
-        #         rank1ness[iter, i] = sortedval[0] / np.sum(sortedval)
-        #         W_val[i] = np.matmul(np.matmul(sortedvec, np.diag(1 / (sortedval + np.exp(-5)))), sortedvec.T)
-        #
-        #
-        #     if min(rank1ness[iter, :]) > RwHopt.eigThres:
-        #         iter = RwHopt.maxIter
-        #
-        #     iter = iter + 1  # To fill rank1ness vector
 
         TH_out = [[t.value for t in T] for T in TH]
         S_out = np.array([[t.value for t in T] for T in S])

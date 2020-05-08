@@ -21,66 +21,72 @@ s_perturb = 0.8
 s_penalize = False
 verbose = False
 s_rankweight = 0.01
-RwHopt = RwHoptCond(max_iter, 0.997, 1e-2, s_penalize, verbose, s_rankweight, s_perturb)
+combine_theta = True
+
+RwHopt = RwHoptCond(max_iter, 0.997, 1e-2, verbose, s_penalize, s_rankweight, combine_theta)
 
 Nx = 2
-Nth = 2
+# Nth = 2
 
 #center of circle
-cx1 = -1
-cy1 = -1.5
-
-cx2 = 1
-cy2 = 1.5
+# cx1 = -1
+# cy1 = -1.5
+#
+# cx2 = 1
+# cy2 = 1.5
 
 # cx2 = 3
 # cy2 = 4
 
 
-# cx1 = -0.65
-# cy1 = 0
-# cx2 = 0.65
-# cy2 = 0
+cx1 = -0.65
+cy1 = 0
+cx2 = 0.65
+cy2 = 0
 
 x = sp.symarray("x", Nx)
-th = sp.symarray('th', Nth)
-
-# Pt = []
-
 
 eps_true = 0.15  # Noise level
 eps_test = eps_true + 0.005
 # circle
-R2 = 1;
-V = x[0] ** 2 + x[1] ** 2 - R2;
-
-
+R2_1 = 1
+R2_2 = 1.5
 Samples_max = 20
 
-X1 = varietySample(V, x, Samples_max, R2, eps_true)
-X2 = varietySample(V, x, Samples_max, R2, eps_true)
+
+V1 = x[0] ** 2 + x[1] ** 2 - R2_1;
+V2 = x[0] ** 2 + x[1] ** 2 - R2_2;
+
+
+
+X1 = varietySample(V1, x, Samples_max, R2_1, eps_true)
+X2 = varietySample(V2, x, Samples_max, R2_2, eps_true)
 
 X1 = X1 + np.array([[cx1], [cy1]])
 X2 = X2 + np.array([[cx2], [cy2]])
 X = np.append(X1, X2, axis=1)
 
-ac = AC_manager(x, th)
+if R2_1 == R2_2:
+    Nth = 2
+    th = sp.symarray("th", Nth)
 
-V_circle = (x[0] - th[0]) ** 2 + (x[1] - th[1]) ** 2 - 1
+    V_circle = (x[0] - th[0]) ** 2 + (x[1] - th[1]) ** 2 - R2_1
+else:
+    Nth = 3
+    th = sp.symarray("th", Nth)
 
+    V_circle = (x[0] - th[0]) ** 2 + (x[1] - th[1]) ** 2 - th[2]
 
 """Generate the model instances"""
-# w1 = 0.25
-# w2 = 0.25
-# w1 = 1e-4
-# w2 = 1e-4
-
 #Circle models
 circ1 = Model(x, th)
 circ1.add_eq(V_circle)
 
-circ2 = Model(x, th)
-circ2.add_eq(V_circle)
+
+if R2_1 != R2_2:
+    R2_max = 3
+    R2_ineq = [-th[2], th[2] - R2_max]
+    circ1.add_ineq(R2_ineq)
 
 #box constraints
 USE_BOX = 1
@@ -95,42 +101,42 @@ if USE_BOX:
     box_y = [min(cy1, cy2) - w2, max(cy1, cy2) + w2]
 
     box1 = np.array([box_x, box_y])
-    box2 = np.array([box_x, box_y])
+    # box2 = np.array([box_x, box_y])
 
     box1_ineq = [-th[0] + box1[0][0], -box1[0][1] + th[0], -th[1] +box1[1][0], -box1[1][1] + th[1]]
-    box2_ineq = [-th[0] + box2[0][0], -box2[0][1] + th[0], -th[1] +box2[1][0], -box2[1][1] + th[1]]
+    # box2_ineq = [-th[0] + box2[0][0], -box2[0][1] + th[0], -th[1] +box2[1][0], -box2[1][1] + th[1]]
 
     circ1.add_ineq(box1_ineq)
-    circ2.add_ineq(box2_ineq)
+    # circ2.add_ineq(box2_ineq)
 
     # Need to add redundant constraints on th^2.
     # Have observed a case where th=2.6 and th^2 =539
 
     #2nd order
     box1sq = np.max(box1**2, 1)
-    box2sq = np.max(box2**2, 1)
+    # box2sq = np.max(box2**2, 1)
 
     box1sq_ineq = [th[0] ** 2 - box1sq[0], th[1] ** 2 - box1sq[1]]
-    box2sq_ineq = [th[0] ** 2 - box2sq[0], th[1] ** 2 - box2sq[1]]
+    # box2sq_ineq = [th[0] ** 2 - box2sq[0], th[1] ** 2 - box2sq[1]]
 
     circ1.add_ineq(box1sq_ineq)
-    circ2.add_ineq(box2sq_ineq)
+    # circ2.add_ineq(box2sq_ineq)
 
     #4th order
     box1qu = np.max(box1 ** 4, 1)
-    box2qu = np.max(box2 ** 4, 1)
+    # box2qu = np.max(box2 ** 4, 1)
 
     box1qu_ineq = [th[0] ** 4 - box1qu[0], th[1] ** 4 - box1qu[1]]
-    box2qu_ineq = [th[0] ** 4 - box2qu[0], th[1] ** 4 - box2qu[1]]
+    # box2qu_ineq = [th[0] ** 4 - box2qu[0], th[1] ** 4 - box2qu[1]]
 
     circ1.add_ineq(box1qu_ineq)
-    circ2.add_ineq(box2qu_ineq)
+    # circ2.add_ineq(box2qu_ineq)
 
 
-# ac.add_model(circ1, 1)
-# ac.add_model(circ2, 1)
+#Start up the Algebraic Clustering routine
+ac = AC_manager(x, th)
 ac.add_model(circ1, 2)
-# tau = [1, 1]
+
 
 cvx_moment = ac.moment_SDP()
 
@@ -180,12 +186,15 @@ plt.scatter(TH[1][0], TH[1][1], marker='x', color="red")
 # plt.plot()
 
 if USE_BOX:
-    rect1 = patches.Rectangle((box1[0][0], box1[1][0]), box1[0][1] - box1[0][0], box1[1][1] - box1[1][0], fill=False, color="blue")
-    ax.add_patch(rect1)
+    # rect1 = patches.Rectangle((box1[0][0], box1[1][0]), box1[0][1] - box1[0][0], box1[1][1] - box1[1][0], fill=False, color="blue")
+    # ax.add_patch(rect1)
 
-    rect2 = patches.Rectangle((box2[0][0], box2[1][0]), box2[0][1] - box2[0][0], box2[1][1] - box2[1][0], fill=False,
-                              color="red")
-    ax.add_patch(rect2)
+    # rect2 = patches.Rectangle((box2[0][0], box2[1][0]), box2[0][1] - box2[0][0], box2[1][1] - box2[1][0], fill=False,
+    #                           color="red")
+    # ax.add_patch(rect2)
+
+    rect = patches.Rectangle((box1[0][0], box1[1][0]), box1[0][1] - box1[0][0], box1[1][1] - box1[1][0], fill=False, color="grey")
+    ax.add_patch(rect)
 
 minrank =cvx_result["rank1ness_min"]
 
