@@ -50,7 +50,7 @@ eps_true = 0.15  # Noise level
 eps_test = eps_true + 0.005
 # circle
 R2_1 = 1
-R2_2 = 1.5
+R2_2 = 1
 Samples_max = 20
 
 
@@ -64,6 +64,7 @@ X2 = varietySample(V2, x, Samples_max, R2_2, eps_true)
 
 X1 = X1 + np.array([[cx1], [cy1]])
 X2 = X2 + np.array([[cx2], [cy2]])
+
 X = np.append(X1, X2, axis=1)
 
 if R2_1 == R2_2:
@@ -140,14 +141,11 @@ ac.add_model(circ1, 2)
 
 cvx_moment = ac.moment_SDP()
 
-prob0 = cp.Problem(cp.Minimize(0), cvx_moment["C"])
-sol0 = prob0.solve(solver=cp.MOSEK, verbose=False, save_file='circle_classify0.task.gz')
+#set up and run clustering
+cvx_invalidation = ac.classify_SDP(X, -1, cvx_moment)
+cvx_result_inv = ac.solve_invalidation(cvx_invalidation, RwHopt.verbose)
 
 cvx_classify = ac.classify_SDP(X, eps_test, cvx_moment)
-
-
-# cvx_classify = ac.generate_SDP(X, eps_test)
-#cvx_result = ac.solve_SDP_rstar(cvx_classify)
 cvx_result = ac.solve_SDP(cvx_classify, RwHopt)
 #cvx_result = ac.run_SDP(X, eps_test, RwHopt)
 
@@ -159,20 +157,8 @@ TH = cvx_result["TH"]
 M = cvx_result["M"]
 Mth = cvx_result["Mth"]
 
-#p = [(x[0] - th[0]) ** 2 + (x[1] - th[1]) ** 2 - 1]
 
-#pt = p + [th[0] - 1, 4 - th[0], th[1] - 1, 3 - th[1]]
-
-#mom = ACmomentConstraint(pt, [x,th])
-
-# sout = AC_CVXPY(X, eps_test, [x, th], p, mult, RwHopt)
-#
-# M0 = sout["M"][0]
-# M1 = sout["M"][1]
-
-# fig, ax = plt.figure(3)  # Plot predicted data
 fig, ax = plt.subplots(1)
-# plt.subplot(2,1,1)
 st = S[0, :] > S[1, :]
 plt.scatter(X[0, :], X[1, :])
 
@@ -181,18 +167,8 @@ plt.scatter(TH[0][0], TH[0][1], marker='x', color="blue")
 
 plt.scatter(X[0, ~st], X[1, ~st], marker='o', color="red")
 plt.scatter(TH[1][0], TH[1][1], marker='x', color="red")
-# box1walkx = [box1[0][0], box1[0][1], box1[0][1], box1[0][0], box1[0][0]]
-# box1walky = [box1[1][0], box1[1][0], box1[1][1], box1[1][1], box1[1][0]]
-# plt.plot()
 
 if USE_BOX:
-    # rect1 = patches.Rectangle((box1[0][0], box1[1][0]), box1[0][1] - box1[0][0], box1[1][1] - box1[1][0], fill=False, color="blue")
-    # ax.add_patch(rect1)
-
-    # rect2 = patches.Rectangle((box2[0][0], box2[1][0]), box2[0][1] - box2[0][0], box2[1][1] - box2[1][0], fill=False,
-    #                           color="red")
-    # ax.add_patch(rect2)
-
     rect = patches.Rectangle((box1[0][0], box1[1][0]), box1[0][1] - box1[0][0], box1[1][1] - box1[1][0], fill=False, color="grey")
     ax.add_patch(rect)
 

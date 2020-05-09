@@ -103,6 +103,7 @@ class AC_manager:
             Data to be classified
         eps: double
             Noise bound in classification (assume scalar for now)
+            If eps < 0, this is a validation problem.
         cvx_moment:
             dictionary containing moment information for problem
         """
@@ -112,11 +113,19 @@ class AC_manager:
         M = []
         S = []
 
+        Invalidation = (eps < 0)
+        if Invalidation:
+            eps = cp.Variable(1)
+            C_classify += [eps >= 0]
+
+
         for i in range(len(self.model)):
-            cvx_out = self.model[i].generate_classify(Xp, eps, Mth[i])
+            cvx_out = self.model[i].generate_classify(Xp, Invalidation, eps, Mth[i])
             M += cvx_out["M"]
             S += cvx_out["S"]
             C_classify += cvx_out["C"]
+
+
 
         # missing con_assign
         # each datapoint is uniquely assigned to a model
@@ -127,7 +136,7 @@ class AC_manager:
 
         S = np.array(S)
 
-        cvx_classify = {"C": C, "M": M, "Mth": Mth, "S": S, "TH": cvx_moment["TH"]}
+        cvx_classify = {"C": C, "M": M, "Mth": Mth, "S": S, "TH": cvx_moment["TH"], "epsilon": eps, "Invalidation": Invalidation}
         return cvx_classify
 
     def generate_SDP(self, Xp, eps):
@@ -137,10 +146,7 @@ class AC_manager:
         return cvx_classify
 
     def solve_SDP(self, cvx_classify, RwHopt):
-        # solve the SDP through reweighted heuristic, or some other SDP method. r*-norm on nuclear norm?
-        # Anything that sticks
-
-        # take variables that have been formulated from the SDP
+        """Solve semialgebraic clustering through reweighted heuristic """
 
         s_penalize = RwHopt.s_penalize
         combine_theta = RwHopt.combine_theta
@@ -297,8 +303,6 @@ class AC_manager:
         M_out = [[m.value for m in mc] for mc in M]
         Mth_out = [m.value for m in Mth]
 
-        # minrank = min(rank1ness[iter-1, :])
-
         out_dict = {"cost": cost, "W": W, "S": S_out, "TH": TH_out, "infeasible": infeasible,
                     "rank1ness": rank1ness, "M": M_out, "Mth": Mth_out, "rank1ness_min": minrank}
 
@@ -310,7 +314,41 @@ class AC_manager:
 
         return out_dict
 
-    def solve_SDP_rstar(self, cvx_classify):
+    def solve_invalidation(self, cvx_classify, verbose):
+        """Invalidation SDP: return "eps_min" as minimum epsilon that may have generated data"""
+        Mth_structured = cvx_classify["Mth"]
+        M = cvx_classify["M"]
+        C = cvx_classify["C"]
+        S = cvx_classify["S"]
+        TH = cvx_classify["TH"]
+
+        eps = cvx_classify["epsilon"]
+
+        # start by labeling a single point (get rid of this when outliers enter)
+        C += [M[0][0][-1, -1] == 1]
+
+        Mth = [item for sublist in Mth_structured for item in sublist]
+
+        objective = cp.Minimize(eps)
+        prob = cp.Problem(objective, C)
+        sol = prob.solve(solver=cp.MOSEK, verbose=verbose)
+
+        if prob.status == 'infeasible':
+            infeasible = True
+        else:
+            infeasible = False
+            eps_out = eps.value
+
+        TH_out = [[t.value for t in T] for T in TH]
+
+        M_out = [[m.value for m in mc] for mc in M]
+        Mth_out = [m.value for m in Mth]
+
+        out_dict = { "TH": TH_out, "infeasible": infeasible, "M": M_out, "Mth": Mth_out, "eps_min": eps_out}
+
+        return out_dict
+
+    def solve_SDP_rstar(self, cvx_classify, verbose):
         # solve the SDP through the r* norm method
 
         # take variables that have been formulated from the SDP
@@ -348,7 +386,7 @@ class AC_manager:
 
         objective = cp.Minimize(cost)
         prob = cp.Problem(objective, C)
-        sol = prob.solve(solver=cp.MOSEK, verbose=True)
+        sol = prob.solve(solver=cp.MOSEK, verbose=verbose)
 
         rank1ness = [0] * Nclass
 
@@ -368,7 +406,10 @@ class AC_manager:
     def run_SDP(self, Xp, eps, RwHopt):
         """Main routine, take everything together. All model synthesis routines + running the solver"""
         cvx_classify = self.generate_SDP(Xp, eps)
-        cvx_result = self.solve_SDP(cvx_classify, RwHopt)
+        if cvx_classify["Invalidation"]:
+            cvx_result = self.solve_invalidation(cvx_classify, RwHopt.verbose)
+        else:
+            cvx_result = self.solve_SDP(cvx_classify, RwHopt)
 
         return cvx_result
 
@@ -459,31 +500,29 @@ class Model:
 
         return cvx_out
 
-    def generate_classify(self, Xp, eps, Mth):
+    def generate_classify(self, Xp, Invalidation, eps, Mth):
         """Run the classify generation routine"""
 
         sizes = [len(self.eq), len(self.ineq)]
-        cvx_out = self.classify_SDP(sizes, self.moment, Xp, eps, Mth)
+        cvx_out = self.classify_SDP(sizes, self.moment, Xp, Invalidation, eps, Mth)
 
         return cvx_out
 
-    def geom_SDP(self, sizes, mom, Mth):
-        """Generate geometric constraints among the model parameters"""
-        pass
+    # def geom_SDP(self, sizes, mom, Mth):
+    #     """Generate geometric constraints among the model parameters"""
+    #     pass
 
-    def classify_SDP(self, sizes, mom, Xp, eps, Mth):
+    def classify_SDP(self, sizes, mom, Xp, Invalidation, eps, Mth):
         """Classify data in Xp, eps given current model Mth (with multiplicity)"""
 
-        # TODO Implement the classificatiton for a given model instance. This will require returning a set of matrices M
-        # as well as a set of new constraints C linking them together. Call classify_SDP from AC_manager, and combine
-        # together into a new program
         [D, Np] = Xp.shape
         mult = len(Mth)
         # len(mom["supp"])
         # simple implementation first
         # then trim out unnecessary variables
 
-        # new constraints
+        con_invalidation = []
+
         con_classify_eq = []
         con_classify_ineq = []
 
@@ -532,13 +571,21 @@ class Model:
                     #classification constraint (data-dependent)
                     mi_curr = [mom["supp"].index(list(m)) for m in monom_poly[k]]
                     for ip in range(Np):
-                        m = cp.Variable((Ns + 1, Ns + 1), PSD=True)
-                        con_mom_agree += [(m[:-1, :-1] == Mth[im])]
+
+                        if Invalidation:
+                            ind_s = -2
+                            m_size = Ns + 2
+                        else:
+                            ind_s = -1
+                            m_size = Ns + 1
+
+                        m = cp.Variable((m_size, m_size), PSD=True)
+                        con_mom_agree += [(m[:ind_s, :ind_s] == Mth[im])]
                         Mi.append(m)
 
-                        con_bin += [(m[ind_1, -1] == m[-1, -1])]
+                        con_bin += [(m[ind_1, ind_s] == m[ind_s, ind_s])]
 
-                        s_curr = m[ind_1, -1]
+                        s_curr = m[ind_1, ind_s]
                         if ip == 0:
                             S[im] = [s_curr]
                         else:
@@ -548,49 +595,26 @@ class Model:
                         rs_curr = m[mi_curr, -1]
 
                         f_curr = rs_curr @ coeff_curr
+
+                        if Invalidation:
+                            s_eps = m[ind_s, -1]
+                            con_invalidation += [m[ind_1, -1] == eps]
+                        else:
+                            s_eps = s_curr * eps
+
                         if k < sizes[0]:
                             # equality constraint
-                            con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
+                            con_classify_eq += [-s_eps <= f_curr, f_curr <= s_eps]
                         else:
                             # inequality constraint <= 0
-                            con_classify_ineq += [f_curr <= eps * s_curr]
+                            con_classify_ineq += [f_curr <= s_eps]
 
+            M.append(Mi)
 
-            # for ip in range(Np):
-            #     m = cp.Variable((Ns + 1, Ns + 1), PSD=True)
-            #     con_mom_agree += [(m[:-1, :-1] == Mth[im])]
-            #     Mi.append(m)
-            #
-            #     con_bin += [(m[ind_1, -1] == m[-1, -1])]
-            #
-            #     s_curr = m[ind_1, -1]
-            #     if ip == 0:
-            #         S[im] = [s_curr]
-            #     else:
-            #         S[im] += [s_curr]
-            #
-            #     # now classify according to the data
-            #     # equality constriants
-            #     for k in range(sizes[0] + sizes[1]):
-            #         if not mom["geom"][k]:
-            #             coeff_curr = mom["fb"][k](*Xp[:, ip])
-            #             mi_curr = monom_idx[k]
-            #             rs_curr = m[mi_curr, -1]
-            #
-            #             f_curr = rs_curr @ coeff_curr
-            #             if k < sizes[0]:
-            #                 # equality constraint
-            #                 con_classify_eq += [-eps * s_curr <= f_curr, f_curr <= eps * s_curr]
-            #             else:
-            #                 # inequality constraint <= 0
-            #                 con_classify_ineq += [f_curr <= eps * s_curr]
-
-            M += [Mi]
-
-        C = con_geom_eq + con_geom_ineq + con_classify_eq + con_classify_ineq + con_bin + con_mom_agree
+        C = con_geom_eq + con_geom_ineq + con_classify_eq + con_classify_ineq + con_bin + con_mom_agree + con_invalidation
 
         # output: C constraints, M classification-blocks, S binary labels
-        cvx_out = {"C": C, "M": M, "S": S}
+        cvx_out = {"C": C, "M": M, "S": S, "Invalidation": Invalidation}
 
         return cvx_out
 
